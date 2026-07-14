@@ -15,15 +15,14 @@ import type { BetSide, Market } from "@/lib/types";
 const SEED_POOL_LIQUIDITY = 50;
 
 function estimatePayout(market: Market, side: BetSide, amount: number): number {
-  if (amount <= 0) return 0;
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
 
   const realYesPool = Math.max(0, Number(market.yesPool) - SEED_POOL_LIQUIDITY);
   const realNoPool = Math.max(0, Number(market.noPool) - SEED_POOL_LIQUIDITY);
   const realSidePool = side === "YES" ? realYesPool : realNoPool;
-  const realOtherPool = side === "YES" ? realNoPool : realYesPool;
 
   const newWinningPool = realSidePool + amount;
-  const newTotalPool = realSidePool + realOtherPool + amount;
+  const newTotalPool = realYesPool + realNoPool + amount;
   return (amount / newWinningPool) * newTotalPool;
 }
 

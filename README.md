@@ -2,6 +2,8 @@
 
 Clone de Polymarket réalisé dans le cadre du projet pro Epitech : marchés de prédiction binaires (oui/non), portefeuille virtuel, paris, et administration (CRUD marchés/paris/utilisateurs, conclusion d'un marché avec règlement des gains).
 
+Pour une prise en main pas à pas du site (compte, paris, portefeuille, espace admin), voir [`GUIDE_UTILISATEUR.md`](GUIDE_UTILISATEUR.md).
+
 ## Stack
 
 - **Frontend** : Next.js (App Router, TypeScript, Tailwind) — `apps/web`
@@ -75,7 +77,7 @@ npm run db:seed   # crée admin@epitech.eu / admin1234
 
 **Côté utilisateur** : inscription/connexion, portefeuille virtuel (1000 € de départ), parcourir les marchés (filtres catégorie/statut), placer un pari (oui/non), historique des paris (en cours / passés), graphe d'évolution du prix.
 
-**Côté admin** (`/admin`, compte avec `role: ADMIN`) : CRUD marché (créer/éditer/supprimer), conclure un marché (règle les gains automatiquement), liste et annulation des paris, CRUD utilisateurs.
+**Côté admin** (`/admin`, compte avec `role: ADMIN`) : CRUD marché (créer/éditer/supprimer — un marché résolu ne peut plus être ni édité ni supprimé), conclure un marché (règle les gains automatiquement), liste et annulation des paris, CRUD utilisateurs.
 
 ## Structure
 

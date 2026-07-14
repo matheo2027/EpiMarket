@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { type BetSide, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
 import { computePrices } from "../pricing.js";
+import { ConcurrencyError } from "../errors.js";
 
 export const betsRouter = Router();
-
-class InsufficientBalanceError extends Error {}
 
 betsRouter.post("/", requireAuth, async (req, res) => {
   const { marketId, side, amount } = req.body ?? {};
@@ -63,17 +62,24 @@ betsRouter.post("/", requireAuth, async (req, res) => {
         data: { walletBalance: { decrement: amount } },
       });
       if (debited.count === 0) {
-        throw new InsufficientBalanceError();
+        throw new ConcurrencyError("Insufficient wallet balance");
       }
 
-      const updatedMarket = await tx.market.update({
-        where: { id: market.id },
+      // Same idea for the market: re-check status=OPEN at commit time, so a
+      // bet can't sneak in on a market a concurrent admin request just
+      // resolved (which would take money with no way to ever pay it out).
+      const marketUpdate = await tx.market.updateMany({
+        where: { id: market.id, status: "OPEN" },
         data: {
           yesPool: betSide === "YES" ? { increment: amount } : undefined,
           noPool: betSide === "NO" ? { increment: amount } : undefined,
           totalVolume: { increment: amount },
         },
       });
+      if (marketUpdate.count === 0) {
+        throw new ConcurrencyError("Market is not open for betting");
+      }
+      const updatedMarket = await tx.market.findUniqueOrThrow({ where: { id: market.id } });
 
       const bet = await tx.bet.create({
         data: {
@@ -98,8 +104,8 @@ betsRouter.post("/", requireAuth, async (req, res) => {
       market: { ...updatedMarket, ...computePrices(updatedMarket) },
     });
   } catch (err) {
-    if (err instanceof InsufficientBalanceError) {
-      res.status(400).json({ error: "Insufficient wallet balance" });
+    if (err instanceof ConcurrencyError) {
+      res.status(400).json({ error: err.message });
       return;
     }
     throw err;
@@ -112,14 +118,7 @@ betsRouter.get("/", requireAuth, async (req, res) => {
   // Re-check the role against the database rather than the JWT claim (see
   // requireAdmin in middleware/auth.ts for why: a stale token would otherwise
   // let a just-demoted user keep pulling every other user's bets).
-  let isAdminAll = false;
-  if (all === "true") {
-    const currentUser = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      select: { role: true },
-    });
-    isAdminAll = currentUser?.role === "ADMIN";
-  }
+  const isAdminAll = all === "true" && (await currentUserRole(req.user!.userId)) === "ADMIN";
 
   const where: Prisma.BetWhereInput = isAdminAll ? {} : { userId: req.user!.userId };
   if (status === "ongoing") where.market = { status: "OPEN" };
@@ -148,7 +147,7 @@ betsRouter.get("/:id", requireAuth, async (req, res) => {
     res.status(404).json({ error: "Bet not found" });
     return;
   }
-  if (bet.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
+  if (bet.userId !== req.user!.userId && (await currentUserRole(req.user!.userId)) !== "ADMIN") {
     res.status(403).json({ error: "Not allowed to view this bet" });
     return;
   }
@@ -170,21 +169,38 @@ betsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   }
 
   const amount = Number(bet.amount);
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: bet.userId },
-      data: { walletBalance: { increment: amount } },
-    });
-    await tx.market.update({
-      where: { id: bet.marketId },
-      data: {
-        yesPool: bet.side === "YES" ? { decrement: amount } : undefined,
-        noPool: bet.side === "NO" ? { decrement: amount } : undefined,
-        totalVolume: { decrement: amount },
-      },
-    });
-    await tx.bet.delete({ where: { id: bet.id } });
-  });
 
-  res.status(204).send();
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Same atomic re-check as bet placement: the market could have been
+      // resolved (and this bet already paid out) between the check above and
+      // this transaction starting, which would otherwise double-credit the
+      // user (once via settlement, once via this refund).
+      const marketUpdate = await tx.market.updateMany({
+        where: { id: bet.marketId, status: "OPEN" },
+        data: {
+          yesPool: bet.side === "YES" ? { decrement: amount } : undefined,
+          noPool: bet.side === "NO" ? { decrement: amount } : undefined,
+          totalVolume: { decrement: amount },
+        },
+      });
+      if (marketUpdate.count === 0) {
+        throw new ConcurrencyError("Cannot void a bet on a resolved market");
+      }
+
+      await tx.user.update({
+        where: { id: bet.userId },
+        data: { walletBalance: { increment: amount } },
+      });
+      await tx.bet.delete({ where: { id: bet.id } });
+    });
+
+    res.status(204).send();
+  } catch (err) {
+    if (err instanceof ConcurrencyError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
 });

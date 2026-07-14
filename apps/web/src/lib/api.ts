@@ -27,6 +27,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "Cannot delete a market that already has bets. Resolve it instead.":
     "Impossible de supprimer un marché qui a déjà des paris. Concluez-le plutôt.",
   "Cannot edit a resolved market": "Impossible de modifier un marché résolu.",
+  "Cannot delete a resolved market": "Impossible de supprimer un marché résolu.",
   "Market is already resolved": "Ce marché est déjà résolu.",
   "Cannot void a bet on a resolved market": "Impossible d'annuler un pari sur un marché résolu.",
   "outcome must be YES or NO": "Le résultat doit être OUI ou NON.",

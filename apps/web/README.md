@@ -12,7 +12,7 @@ NEXT_PUBLIC_API_URL="http://localhost:4000"
 
 ## Authentification
 
-JWT géré côté client (pas NextAuth) : `src/lib/auth-context.tsx` stocke le token dans `localStorage` et expose `useAuth()` (`user`, `token`, `login`, `register`, `logout`, `refreshUser`). `src/lib/api.ts` fournit `apiFetch()`, un wrapper `fetch` qui attache le header `Authorization: Bearer <token>` et traduit les messages d'erreur de l'API en français.
+JWT géré côté client (pas NextAuth) : `src/lib/auth-context.tsx` stocke le token dans `localStorage` et expose `useAuth()` (`user`, `token`, `login`, `register`, `logout`, `refreshUser`). `src/lib/api.ts` fournit `apiFetch()`, un wrapper `fetch` qui attache le header `Authorization: Bearer <token>` et traduit les messages d'erreur de l'API en français, et `errorMessage(err)`, à utiliser dans tous les `catch` pour obtenir ce message traduit de façon homogène (au lieu de réinventer le `instanceof ApiError ? ... : ...` à chaque formulaire).
 
 Comme le token vit en `localStorage`, toute page qui a besoin de la session (portefeuille, formulaire de pari, admin) est un Client Component (`"use client"`) qui fetch côté client. Les pages publiques (accueil, liste des marchés, détail d'un marché) sont des Server Components qui fetchent directement l'API côté serveur.
 

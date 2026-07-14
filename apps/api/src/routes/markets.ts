@@ -3,10 +3,9 @@ import { MarketCategory, MarketStatus, type Market } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { computePrices } from "../pricing.js";
+import { ConcurrencyError } from "../errors.js";
 
 export const marketsRouter = Router();
-
-class AlreadyResolvedError extends Error {}
 
 const CATEGORIES = Object.values(MarketCategory);
 const STATUSES = Object.values(MarketStatus);
@@ -104,11 +103,11 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
       category: category as MarketCategory,
       startDate: start,
       endDate: end,
+      // Nested write: the market and its seed price point are created in a
+      // single atomic insert, so a crash between two separate calls can't
+      // leave a market with no starting point for the price chart.
+      pricePoints: { create: { yesPrice: 0.5 } },
     },
-  });
-
-  await prisma.pricePoint.create({
-    data: { marketId: market.id, yesPrice: 0.5 },
   });
 
   res.status(201).json({ market: serializeMarket(market) });
@@ -153,6 +152,11 @@ marketsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  if (existing.status === "RESOLVED") {
+    res.status(400).json({ error: "Cannot delete a resolved market" });
+    return;
+  }
+
   const betCount = await prisma.bet.count({ where: { marketId: existing.id } });
   if (betCount > 0) {
     res.status(400).json({ error: "Cannot delete a market that already has bets. Resolve it instead." });
@@ -190,10 +194,13 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
         data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
       });
       if (claimed.count === 0) {
-        throw new AlreadyResolvedError();
+        throw new ConcurrencyError("Market is already resolved");
       }
 
-      const bets = await tx.bet.findMany({ where: { marketId: existing.id } });
+      // Deterministic order (not insertion/row order, which Postgres doesn't
+      // guarantee) so which specific winner absorbs the rounding remainder
+      // below is reproducible rather than arbitrary.
+      const bets = await tx.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
 
       // Pari-mutuel settlement: winners split the real money wagered (not
       // the virtual seed liquidity) proportionally to their stake. If nobody
@@ -239,8 +246,8 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
 
     res.json({ market: serializeMarket(market) });
   } catch (err) {
-    if (err instanceof AlreadyResolvedError) {
-      res.status(400).json({ error: "Market is already resolved" });
+    if (err instanceof ConcurrencyError) {
+      res.status(400).json({ error: err.message });
       return;
     }
     throw err;

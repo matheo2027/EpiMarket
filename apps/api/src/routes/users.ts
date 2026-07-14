@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { Role } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
 import { publicUser } from "./auth.js";
 
 export const usersRouter = Router();
@@ -16,7 +16,7 @@ usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
 });
 
 usersRouter.get("/:id", requireAuth, async (req, res) => {
-  if (req.user!.userId !== req.params.id && req.user!.role !== "ADMIN") {
+  if (req.user!.userId !== req.params.id && (await currentUserRole(req.user!.userId)) !== "ADMIN") {
     res.status(403).json({ error: "Not allowed to view this user" });
     return;
   }
@@ -50,19 +50,33 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim();
 
-  const existing = await prisma.user.findFirst({ where: { OR: [{ email: normalizedEmail }, { username }] } });
+  const existing = await prisma.user.findFirst({
+    where: { OR: [{ email: normalizedEmail }, { username: normalizedUsername }] },
+  });
   if (existing) {
     res.status(409).json({ error: "Email or username already in use" });
     return;
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: { email: normalizedEmail, username, passwordHash, role: role ?? "USER" },
-  });
-
-  res.status(201).json({ user: publicUser(user) });
+  try {
+    const user = await prisma.user.create({
+      data: { email: normalizedEmail, username: normalizedUsername, passwordHash, role: role ?? "USER" },
+    });
+    res.status(201).json({ user: publicUser(user) });
+  } catch (err: unknown) {
+    // The findFirst check above is check-then-act: two concurrent creates
+    // with the same email/username can both pass it, so the DB's unique
+    // constraint is the real guard — translate its violation instead of
+    // letting it bubble up as an unhandled 500.
+    if (err instanceof Error && "code" in err && (err as { code: string }).code === "P2002") {
+      res.status(409).json({ error: "Email or username already in use" });
+      return;
+    }
+    throw err;
+  }
 });
 
 usersRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
@@ -80,7 +94,7 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
       res.status(400).json({ error: "Username must be at least 3 characters" });
       return;
     }
-    data.username = username;
+    data.username = username.trim();
   }
   if (email !== undefined) {
     if (typeof email !== "string" || !EMAIL_RE.test(email)) {

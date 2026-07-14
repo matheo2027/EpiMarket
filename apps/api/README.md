@@ -96,13 +96,13 @@ Un `PricePoint` est créé à chaque pari pour tracer la courbe.
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me`
 - `GET /markets`, `GET /markets/:id` — public
 - `GET /markets/:id/price-history` — public, liste des `PricePoint` triés par date (pour le graphe d'évolution). Un point à 0.5 est créé automatiquement à la création du marché.
-- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin
+- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin. `PATCH`/`DELETE` refusés si le marché est déjà résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer).
 - `POST /bets` — placer un pari (utilisateur connecté). Débite le wallet, incrémente le pool du camp choisi + `totalVolume`, enregistre le prix obtenu sur le `Bet`, log un nouveau `PricePoint`.
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
 - `DELETE /bets/:id` — (admin) annule un pari : rembourse le wallet, retire le montant du pool et du volume. Refusé si le marché est déjà résolu.
-- `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris.
+- `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même.
 - `GET /users/:id` — soi-même ou admin
 
 ## Règlement des gains (settlement)
@@ -113,6 +113,19 @@ Quand un marché est conclu (`POST /markets/:id/resolve`), les gains sont régl�
 - Si personne n'a parié sur le camp gagnant, tout le monde est remboursé (push).
 - Chaque `Bet` reçoit son `payout` (0 pour un pari perdant, non-null dès que le marché est résolu).
 - Un pari ne peut plus être annulé (`DELETE /bets/:id`) une fois le marché résolu, car les gains ont déjà été distribués.
+
+## Sécurité et gestion de la concurrence
+
+- **Rôle vérifié en base, pas dans le token.** Le JWT est valable 7 jours. Si un admin est rétrogradé, son token reste techniquement valide mais son rôle est revérifié en base à chaque requête sensible (`currentUserRole()` dans `src/middleware/auth.ts`, utilisé par `requireAdmin` et par les routes qui font un contrôle "propriétaire ou admin"). Un admin rétrogradé perd donc l'accès immédiatement, pas seulement à l'expiration du token.
+- **Emails normalisés.** `email` est toujours comparé en minuscules/sans espaces (`auth.ts`, `users.ts`), pour éviter qu'un même email avec une casse différente crée un doublon ou bloque la connexion.
+- **Races protégées par des mises à jour atomiques.** Plusieurs opérations financières utilisent `updateMany` avec une clause `WHERE` de garde plutôt qu'un `findUnique` + `update` classique, pour qu'une requête concurrente ne puisse pas passer entre les deux :
+  - Placer un pari : le débit du wallet est conditionné à `walletBalance >= amount`, et l'incrément des pools est conditionné à `status = OPEN` — impossible de miser plus que son solde ou de parier sur un marché qui vient d'être conclu.
+  - Annuler un pari : le remboursement est conditionné à `status = OPEN` — impossible d'annuler un pari déjà réglé par une résolution concurrente (double crédit).
+  - Conclure un marché : le passage `OPEN → RESOLVED` est atomique — deux clics simultanés sur "Conclure" ne peuvent pas payer les gagnants deux fois.
+  - Inscription / création d'utilisateur : la création est protégée par la contrainte d'unicité de la base (capturée via le code d'erreur Prisma `P2002`), pas seulement par une vérification préalable.
+
+  Toutes ces gardes lèvent une même erreur `ConcurrencyError` (`src/errors.ts`), attrapée au niveau de la route pour renvoyer un message clair plutôt qu'une erreur 500.
+- **Aucune requête ne peut faire planter le serveur.** `express-async-errors` est importé en premier dans `src/index.ts` pour qu'une promesse rejetée dans une route `async` soit automatiquement transmise au middleware d'erreur final, qui répond `500` proprement au lieu de laisser le process planter (Express 4 ne le fait pas nativement).
 
 ## Diagramme
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type SubmitEvent } from "react";
+import { errorMessage } from "@/lib/api";
 import { CATEGORY_LABELS, type MarketCategory } from "@/lib/types";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as MarketCategory[];
@@ -41,7 +42,7 @@ export function MarketForm({
     try {
       await onSubmit(values);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Une erreur est survenue.");
+      setError(errorMessage(err));
     } finally {
       setSubmitting(false);
     }

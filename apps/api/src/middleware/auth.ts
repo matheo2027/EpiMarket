@@ -26,16 +26,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Re-checks the role against the database rather than trusting the JWT
+// claim: a token issued before a demotion stays valid for up to 7 days, so
+// trusting req.user.role alone would let a demoted admin keep access. Every
+// place that gates on "is this caller currently an admin" should go through
+// this, not re-check req.user.role directly.
+export async function currentUserRole(userId: string): Promise<"USER" | "ADMIN" | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return user?.role ?? null;
+}
+
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    // Re-check the role against the database rather than trusting the JWT
-    // claim: a token issued before a demotion stays valid for up to 7 days,
-    // so trusting req.user.role alone would let a demoted admin keep access.
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      select: { role: true },
-    });
-    if (user?.role !== "ADMIN") {
+    const role = await currentUserRole(req.user!.userId);
+    if (role !== "ADMIN") {
       res.status(403).json({ error: "Admin access required" });
       return;
     }

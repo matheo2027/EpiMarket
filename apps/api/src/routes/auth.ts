@@ -43,9 +43,10 @@ authRouter.post("/register", async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim();
 
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ email: normalizedEmail }, { username }] },
+    where: { OR: [{ email: normalizedEmail }, { username: normalizedUsername }] },
   });
   if (existing) {
     res.status(409).json({ error: "Email or username already in use" });
@@ -53,12 +54,23 @@ authRouter.post("/register", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: { email: normalizedEmail, username, passwordHash },
-  });
-
-  const token = signToken({ userId: user.id, role: user.role });
-  res.status(201).json({ token, user: publicUser(user) });
+  try {
+    const user = await prisma.user.create({
+      data: { email: normalizedEmail, username: normalizedUsername, passwordHash },
+    });
+    const token = signToken({ userId: user.id, role: user.role });
+    res.status(201).json({ token, user: publicUser(user) });
+  } catch (err: unknown) {
+    // findFirst above is check-then-act: two concurrent registrations with
+    // the same email/username can both pass it, so the DB's unique
+    // constraint is the real guard — translate its violation instead of
+    // letting it bubble up as an unhandled 500.
+    if (err instanceof Error && "code" in err && (err as { code: string }).code === "P2002") {
+      res.status(409).json({ error: "Email or username already in use" });
+      return;
+    }
+    throw err;
+  }
 });
 
 authRouter.post("/login", async (req, res) => {
