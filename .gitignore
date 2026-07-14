@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+dist/
+build/
+.next/
+*.tsbuildinfo
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

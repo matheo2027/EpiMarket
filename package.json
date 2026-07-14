@@ -1,0 +1,18 @@
+{
+  "name": "epitech-polymarket",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n db,api,web -c blue,green,magenta \"npm:dev:db:wait\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:db": "docker compose up -d",
+    "dev:db:wait": "docker compose up -d && node -e \"setTimeout(()=>{}, 1000)\"",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
