@@ -2,10 +2,19 @@ import "dotenv/config";
 import cors from "cors";
 import express from "express";
 import { prisma } from "./prisma.js";
+import { authRouter } from "./routes/auth.js";
+import { betsRouter } from "./routes/bets.js";
+import { marketsRouter } from "./routes/markets.js";
+import { usersRouter } from "./routes/users.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use("/auth", authRouter);
+app.use("/markets", marketsRouter);
+app.use("/bets", betsRouter);
+app.use("/users", usersRouter);
 
 app.get("/health", async (_req, res) => {
   try {

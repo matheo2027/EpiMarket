@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Web — Frontend
 
-## Getting Started
+Next.js (App Router, TypeScript, Tailwind v4). Parle à l'API (`apps/api`) via `fetch`, aucune route API interne à ce projet — tout passe par `NEXT_PUBLIC_API_URL`.
 
-First, run the development server:
+## Configuration
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+`.env` (non versionné) :
+
+```
+NEXT_PUBLIC_API_URL="http://localhost:4000"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Authentification
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+JWT géré côté client (pas NextAuth) : `src/lib/auth-context.tsx` stocke le token dans `localStorage` et expose `useAuth()` (`user`, `token`, `login`, `register`, `logout`, `refreshUser`). `src/lib/api.ts` fournit `apiFetch()`, un wrapper `fetch` qui attache le header `Authorization: Bearer <token>` et traduit les messages d'erreur de l'API en français.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Comme le token vit en `localStorage`, toute page qui a besoin de la session (portefeuille, formulaire de pari, admin) est un Client Component (`"use client"`) qui fetch côté client. Les pages publiques (accueil, liste des marchés, détail d'un marché) sont des Server Components qui fetchent directement l'API côté serveur.
 
-## Learn More
+## Structure des pages
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/app/
+  page.tsx                     accueil : marché vedette + grille des marchés ouverts
+  marches/page.tsx             liste des marchés, filtres catégorie/statut
+  marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
+  connexion/, inscription/     auth
+  portefeuille/page.tsx        solde + historique des paris (en cours/passés)
+  admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
+    marches/                   CRUD marché + conclure un marché
+    paris/                     liste de tous les paris + annulation
+    utilisateurs/              CRUD utilisateurs
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Composants notables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `components/split-bar.tsx` — la barre de répartition OUI/NON (élément signature du design), réutilisée partout où une cote est affichée.
+- `components/price-chart.tsx` — graphe d'évolution du prix en SVG fait main (pas de librairie de charts).
+- `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin.
+- `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives admin (conclure, supprimer, annuler).
 
-## Deploy on Vercel
+## Design
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Thème sombre, palette validée avec le skill dataviz (vert/rouge sémantiques pour OUI/NON). Typographie : Space Grotesk (titres), Inter (texte), JetBrains Mono (chiffres/cotes). Détails dans `src/app/globals.css`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Commandes
+
+```bash
+npm run dev     # serveur de dev (Turbopack)
+npm run build   # build de production, valide aussi le typage TypeScript
+npm run lint
+```

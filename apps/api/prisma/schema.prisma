@@ -6,3 +6,93 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MarketCategory {
+  POLITICS
+  SPORTS
+  CRYPTO
+  ECONOMY
+  SCIENCE_TECH
+  POP_CULTURE
+  OTHER
+}
+
+enum MarketStatus {
+  OPEN
+  RESOLVED
+}
+
+enum BetSide {
+  YES
+  NO
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  passwordHash  String
+  role          Role     @default(USER)
+  walletBalance Decimal  @default(1000) @db.Decimal(18, 2)
+  createdAt     DateTime @default(now())
+
+  bets Bet[]
+}
+
+model Market {
+  id              String         @id @default(cuid())
+  title           String
+  description     String
+  yesDescription  String
+  noDescription   String
+  category        MarketCategory
+  status          MarketStatus   @default(OPEN)
+  resolvedOutcome BetSide?
+  startDate       DateTime
+  endDate         DateTime
+
+  // Simple constant-product pools used to derive the yes/no odds.
+  yesPool     Decimal @default(50) @db.Decimal(18, 2)
+  noPool      Decimal @default(50) @db.Decimal(18, 2)
+  totalVolume Decimal @default(0) @db.Decimal(18, 2)
+
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+
+  bets        Bet[]
+  pricePoints PricePoint[]
+}
+
+model Bet {
+  id        String   @id @default(cuid())
+  side      BetSide
+  amount    Decimal  @db.Decimal(18, 2)
+  price     Decimal  @db.Decimal(5, 4)
+  payout    Decimal? @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id])
+
+  @@index([userId])
+  @@index([marketId])
+}
+
+model PricePoint {
+  id        String   @id @default(cuid())
+  yesPrice  Decimal  @db.Decimal(5, 4)
+  timestamp DateTime @default(now())
+
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id])
+
+  @@index([marketId, timestamp])
+}
