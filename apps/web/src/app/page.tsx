@@ -20,7 +20,7 @@ export default async function HomePage() {
   if (markets === null) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-32 text-center">
-        <h1 className="font-display text-4xl font-semibold tracking-tight">Epitech Market</h1>
+        <h1 className="font-display text-4xl font-semibold tracking-tight">EpiMarket</h1>
         <p className="mt-4 text-muted">
           Impossible de contacter le serveur pour le moment. Réessayez dans un instant.
         </p>
@@ -31,7 +31,7 @@ export default async function HomePage() {
   if (markets.length === 0) {
     return (
       <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-32 text-center">
-        <h1 className="font-display text-4xl font-semibold tracking-tight">Epitech Market</h1>
+        <h1 className="font-display text-4xl font-semibold tracking-tight">EpiMarket</h1>
         <p className="mt-4 text-muted">Aucun marché n&apos;est ouvert pour le moment. Revenez bientôt.</p>
       </div>
     );

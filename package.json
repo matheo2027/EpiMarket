@@ -1,5 +1,5 @@
 {
-  "name": "epitech-polymarket",
+  "name": "epimarket",
   "private": true,
   "workspaces": [
     "apps/*"

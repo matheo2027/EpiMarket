@@ -1,4 +1,4 @@
-# Epitech Polymarket
+# EpiMarket
 
 Clone de Polymarket réalisé dans le cadre du projet pro Epitech : marchés de prédiction binaires (oui/non), portefeuille virtuel, paris, et administration (CRUD marchés/paris/utilisateurs, conclusion d'un marché avec règlement des gains).
 

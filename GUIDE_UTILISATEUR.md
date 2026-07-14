@@ -1,4 +1,4 @@
-# Guide d'utilisation — Epitech Market
+# Guide d'utilisation — EpiMarket
 
 Ce guide explique comment utiliser le site, côté visiteur/parieur et côté administrateur. Pour l'installation et les détails techniques, voir [`README.md`](README.md).
 

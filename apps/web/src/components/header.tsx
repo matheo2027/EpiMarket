@@ -14,7 +14,7 @@ export function Header() {
             <span className="w-1/2 bg-yes" />
             <span className="w-1/2 bg-no" />
           </span>
-          EPITECH<span className="text-brand">MARKET</span>
+          Epi<span className="text-brand">Market</span>
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm font-medium text-muted sm:flex">

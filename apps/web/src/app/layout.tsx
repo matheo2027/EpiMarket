@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Epitech Market",
+  title: "EpiMarket",
   description: "Marchés de prédiction — pariez sur ce qui va se passer.",
 };
 
