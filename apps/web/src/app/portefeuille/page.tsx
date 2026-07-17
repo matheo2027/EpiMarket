@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch, errorMessage } from "@/lib/api";
 import type { Bet } from "@/lib/types";
 import { CategoryBadge } from "@/components/category-badge";
+import { truncateHash } from "@/lib/format";
 
 type Tab = "ongoing" | "past";
 
@@ -38,6 +39,11 @@ function BetRow({ bet }: { bet: Bet }) {
         </div>
         <p className="text-sm text-paper">{market?.title ?? "Marché"}</p>
         <p className="font-mono text-xs text-muted">{formatDate(bet.createdAt)}</p>
+        {bet.txHash && (
+          <p className="font-mono text-[11px] text-muted" title={bet.txHash}>
+            tx {truncateHash(bet.txHash)}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-6 font-mono text-sm tabular-nums">
         <div>
@@ -92,6 +98,11 @@ export default function PortefeuillePage() {
       <div className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <p className="text-sm text-muted">Solde disponible</p>
         <p className="mt-2 font-mono text-4xl tabular-nums text-paper">{Number(user.walletBalance).toFixed(2)} €</p>
+        {user.walletAddress && (
+          <p className="mt-3 font-mono text-xs text-muted" title={user.walletAddress}>
+            Adresse on-chain : {truncateHash(user.walletAddress)}
+          </p>
+        )}
       </div>
 
       <div className="mt-8 flex gap-2">

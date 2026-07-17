@@ -3,6 +3,8 @@ import { Router } from "express";
 import { prisma } from "../prisma.js";
 import { signToken } from "../jwt.js";
 import { requireAuth } from "../middleware/auth.js";
+import { encryptPrivateKey, generateCustodialWallet } from "../blockchain/wallet.js";
+import { provisionNewWallet } from "../blockchain/contract.js";
 
 export const authRouter = Router();
 
@@ -14,6 +16,7 @@ export function publicUser(user: {
   username: string;
   role: "USER" | "ADMIN";
   walletBalance: unknown;
+  walletAddress: string | null;
   createdAt: Date;
 }) {
   return {
@@ -22,6 +25,7 @@ export function publicUser(user: {
     username: user.username,
     role: user.role,
     walletBalance: user.walletBalance,
+    walletAddress: user.walletAddress,
     createdAt: user.createdAt,
   };
 }
@@ -54,17 +58,24 @@ authRouter.post("/register", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const wallet = generateCustodialWallet();
   try {
     const user = await prisma.user.create({
-      data: { email: normalizedEmail, username: normalizedUsername, passwordHash },
+      data: {
+        email: normalizedEmail,
+        username: normalizedUsername,
+        passwordHash,
+        walletAddress: wallet.address,
+        encryptedPrivateKey: encryptPrivateKey(wallet.privateKey),
+      },
     });
+
+    await provisionNewWallet(user.id, wallet.address);
+    const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
     const token = signToken({ userId: user.id, role: user.role });
-    res.status(201).json({ token, user: publicUser(user) });
+    res.status(201).json({ token, user: publicUser(freshUser) });
   } catch (err: unknown) {
-    // findFirst above is check-then-act: two concurrent registrations with
-    // the same email/username can both pass it, so the DB's unique
-    // constraint is the real guard — translate its violation instead of
-    // letting it bubble up as an unhandled 500.
     if (err instanceof Error && "code" in err && (err as { code: string }).code === "P2002") {
       res.status(409).json({ error: "Email or username already in use" });
       return;

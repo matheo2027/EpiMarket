@@ -24,10 +24,10 @@ src/app/
   marches/page.tsx             liste des marchés, filtres catégorie/statut
   marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
   connexion/, inscription/     auth
-  portefeuille/page.tsx        solde + historique des paris (en cours/passés)
+  portefeuille/page.tsx        solde, adresse du wallet on-chain, historique des paris avec hash de transaction
   admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
     marches/                   CRUD marché + conclure un marché
-    paris/                     liste de tous les paris + annulation
+    paris/                     liste de tous les paris (mise, camp, gain, hash de transaction)
     utilisateurs/              CRUD utilisateurs
 ```
 

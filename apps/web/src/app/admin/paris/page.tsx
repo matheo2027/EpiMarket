@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useConfirm } from "@/lib/confirm-context";
+import { truncateHash } from "@/lib/format";
 import type { Bet } from "@/lib/types";
 
 function formatDate(d: string) {
@@ -12,10 +12,8 @@ function formatDate(d: string) {
 
 export default function AdminBetsPage() {
   const { token } = useAuth();
-  const confirm = useConfirm();
   const [bets, setBets] = useState<Bet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!token) return;
@@ -28,26 +26,6 @@ export default function AdminBetsPage() {
     load();
   }, [load]);
 
-  async function handleVoid(bet: Bet) {
-    const ok = await confirm({
-      title: "Annuler le pari",
-      message: `Annuler ce pari de ${Number(bet.amount).toFixed(2)} € (${bet.user?.username ?? bet.userId}) ? Le montant sera remboursé.`,
-      confirmLabel: "Annuler le pari",
-      danger: true,
-    });
-    if (!ok) return;
-    setBusyId(bet.id);
-    setError(null);
-    try {
-      await apiFetch(`/bets/${bet.id}`, { method: "DELETE", token });
-      load();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <p className="text-sm text-muted">{bets?.length ?? "…"} pari(s)</p>
@@ -58,7 +36,6 @@ export default function AdminBetsPage() {
         {bets?.map((bet) => {
           const sideColor = bet.side === "YES" ? "text-yes" : "text-no";
           const payout = bet.payout !== null ? Number(bet.payout) : null;
-          const canVoid = bet.market?.status === "OPEN";
 
           return (
             <div
@@ -74,6 +51,11 @@ export default function AdminBetsPage() {
                 </div>
                 <p className="text-sm text-paper">{bet.market?.title ?? "Marché"}</p>
                 <p className="font-mono text-xs text-muted">{formatDate(bet.createdAt)}</p>
+                {bet.txHash && (
+                  <p className="font-mono text-[11px] text-muted" title={bet.txHash}>
+                    tx {truncateHash(bet.txHash)}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-6 font-mono text-sm tabular-nums">
@@ -87,13 +69,6 @@ export default function AdminBetsPage() {
                     {payout === null ? "En attente" : `${payout.toFixed(2)} €`}
                   </p>
                 </div>
-                <button
-                  disabled={!canVoid || busyId === bet.id}
-                  onClick={() => handleVoid(bet)}
-                  className="rounded-full border border-line px-3.5 py-1.5 text-xs font-medium text-muted transition-colors hover:border-no hover:text-no disabled:opacity-30"
-                >
-                  Annuler
-                </button>
               </div>
             </div>
           );

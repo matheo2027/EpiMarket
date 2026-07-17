@@ -38,8 +38,11 @@ model User {
   username      String   @unique
   passwordHash  String
   role          Role     @default(USER)
-  walletBalance Decimal  @default(1000) @db.Decimal(18, 2)
+  walletBalance Decimal  @default(0) @db.Decimal(18, 2)
   createdAt     DateTime @default(now())
+
+  walletAddress       String? @unique
+  encryptedPrivateKey String?
 
   bets Bet[]
 }
@@ -56,7 +59,6 @@ model Market {
   startDate       DateTime
   endDate         DateTime
 
-  // Simple constant-product pools used to derive the yes/no odds.
   yesPool     Decimal @default(50) @db.Decimal(18, 2)
   noPool      Decimal @default(50) @db.Decimal(18, 2)
   totalVolume Decimal @default(0) @db.Decimal(18, 2)
@@ -74,6 +76,7 @@ model Bet {
   amount    Decimal  @db.Decimal(18, 2)
   price     Decimal  @db.Decimal(5, 4)
   payout    Decimal? @db.Decimal(18, 2)
+  txHash    String?
   createdAt DateTime @default(now())
 
   userId String

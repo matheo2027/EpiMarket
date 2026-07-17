@@ -5,13 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { BetSide, Market } from "@/lib/types";
+import { truncateHash } from "@/lib/format";
+import type { Bet, BetSide, Market } from "@/lib/types";
 
-// yesPool/noPool start at this seed value for price discovery on a fresh
-// market (see apps/api/prisma/schema.prisma) and stay inflated by it forever
-// — it's never real money. Settlement only ever pays out real stakes, so the
-// payout estimate below has to strip the seed out first or it promises money
-// that doesn't exist (see apps/api/README.md "Règlement des gains").
 const SEED_POOL_LIQUIDITY = 50;
 
 function estimatePayout(market: Market, side: BetSide, amount: number): number {
@@ -71,12 +67,13 @@ export function BetForm({ market }: { market: Market }) {
 
     setSubmitting(true);
     try {
-      await apiFetch("/bets", {
+      const data = await apiFetch<{ bet: Bet }>("/bets", {
         method: "POST",
         token,
         body: { marketId: market.id, side, amount: numericAmount },
       });
-      setSuccess(`Pari placé : ${numericAmount} € sur ${side === "YES" ? "OUI" : "NON"}.`);
+      const txSuffix = data.bet.txHash ? ` (tx ${truncateHash(data.bet.txHash)})` : "";
+      setSuccess(`Pari placé : ${numericAmount} € sur ${side === "YES" ? "OUI" : "NON"}.${txSuffix}`);
       setAmount("");
       await refreshUser();
       router.refresh();
