@@ -19,10 +19,6 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const resolver = useRef<((value: boolean) => void) | null>(null);
 
   const confirm = useCallback<ConfirmFn>((opts) => {
-    // A second confirm() call before the first is answered would otherwise
-    // silently orphan the first caller's promise (it would never resolve,
-    // leaving that row's button disabled forever) — resolve it as cancelled
-    // first.
     resolver.current?.(false);
     setOptions(opts);
     return new Promise<boolean>((resolve) => {

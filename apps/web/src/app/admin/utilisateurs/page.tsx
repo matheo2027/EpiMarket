@@ -96,7 +96,6 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [role, setRole] = useState<Role>(user.role);
-  const [walletBalance, setWalletBalance] = useState(user.walletBalance);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -107,7 +106,7 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
       await apiFetch(`/users/${user.id}`, {
         method: "PATCH",
         token,
-        body: { role, walletBalance: Number(walletBalance) },
+        body: { role },
       });
       setEditing(false);
       onChanged();
@@ -160,10 +159,7 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
             <p className="font-mono text-sm tabular-nums text-paper">{Number(user.walletBalance).toFixed(2)} €</p>
             <button
               onClick={() => {
-                // Reseed the draft from the current prop, not stale state
-                // left over from a previous edit session on this row.
                 setRole(user.role);
-                setWalletBalance(user.walletBalance);
                 setEditing(true);
               }}
               className="rounded-full border border-line px-3.5 py-1.5 text-xs font-medium text-paper transition-colors hover:border-brand"
@@ -185,13 +181,6 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
               <option value="USER">Utilisateur</option>
               <option value="ADMIN">Admin</option>
             </select>
-            <input
-              type="number"
-              step="0.01"
-              value={walletBalance}
-              onChange={(e) => setWalletBalance(e.target.value)}
-              className={`${inputClass} w-28`}
-            />
             <button
               disabled={busy}
               onClick={handleSave}

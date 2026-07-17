@@ -4,6 +4,8 @@ import { Role } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
 import { publicUser } from "./auth.js";
+import { encryptPrivateKey, generateCustodialWallet } from "../blockchain/wallet.js";
+import { provisionNewWallet } from "../blockchain/contract.js";
 
 export const usersRouter = Router();
 
@@ -61,16 +63,24 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
+  const wallet = generateCustodialWallet();
   try {
     const user = await prisma.user.create({
-      data: { email: normalizedEmail, username: normalizedUsername, passwordHash, role: role ?? "USER" },
+      data: {
+        email: normalizedEmail,
+        username: normalizedUsername,
+        passwordHash,
+        role: role ?? "USER",
+        walletAddress: wallet.address,
+        encryptedPrivateKey: encryptPrivateKey(wallet.privateKey),
+      },
     });
-    res.status(201).json({ user: publicUser(user) });
+
+    await provisionNewWallet(user.id, wallet.address);
+    const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+    res.status(201).json({ user: publicUser(freshUser) });
   } catch (err: unknown) {
-    // The findFirst check above is check-then-act: two concurrent creates
-    // with the same email/username can both pass it, so the DB's unique
-    // constraint is the real guard — translate its violation instead of
-    // letting it bubble up as an unhandled 500.
     if (err instanceof Error && "code" in err && (err as { code: string }).code === "P2002") {
       res.status(409).json({ error: "Email or username already in use" });
       return;
@@ -86,7 +96,7 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
-  const { username, email, role, walletBalance } = req.body ?? {};
+  const { username, email, role } = req.body ?? {};
   const data: Record<string, unknown> = {};
 
   if (username !== undefined) {
@@ -109,13 +119,6 @@ usersRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
       return;
     }
     data.role = role;
-  }
-  if (walletBalance !== undefined) {
-    if (typeof walletBalance !== "number" || !Number.isFinite(walletBalance) || walletBalance < 0) {
-      res.status(400).json({ error: "walletBalance must be a non-negative number" });
-      return;
-    }
-    data.walletBalance = walletBalance;
   }
 
   try {

@@ -3,7 +3,9 @@ import { MarketCategory, MarketStatus, type Market } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import { computePrices } from "../pricing.js";
-import { ConcurrencyError } from "../errors.js";
+import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
+import { runAsOwner } from "../blockchain/provider.js";
+import { fromChainAmount } from "../blockchain/units.js";
 
 export const marketsRouter = Router();
 
@@ -103,12 +105,18 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
       category: category as MarketCategory,
       startDate: start,
       endDate: end,
-      // Nested write: the market and its seed price point are created in a
-      // single atomic insert, so a crash between two separate calls can't
-      // leave a market with no starting point for the price chart.
       pricePoints: { create: { yesPrice: 0.5 } },
     },
   });
+
+  try {
+    const tx = await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
+    await tx.wait();
+  } catch (err) {
+    await prisma.market.delete({ where: { id: market.id } });
+    res.status(502).json({ error: `Could not create the on-chain market: ${revertReason(err) ?? (err as Error).message}` });
+    return;
+  }
 
   res.status(201).json({ market: serializeMarket(market) });
 });
@@ -185,71 +193,60 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
   }
 
   try {
-    const market = await prisma.$transaction(async (tx) => {
-      // Atomically claim the resolve: only the request that flips OPEN ->
-      // RESOLVED proceeds, so two concurrent "Conclure" clicks can't both
-      // read status=OPEN and both pay out winners.
-      const claimed = await tx.market.updateMany({
-        where: { id: existing.id, status: "OPEN" },
-        data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
+    const claimed = await prisma.market.updateMany({
+      where: { id: existing.id, status: "OPEN" },
+      data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      res.status(400).json({ error: "Market is already resolved" });
+      return;
+    }
+
+    try {
+      const tx = await runAsOwner((nonce) =>
+        getOwnerContract().resolveMarket(existing.id, sideToOutcome(outcome), { nonce }),
+      );
+      await tx.wait();
+    } catch (err) {
+      await prisma.market.update({
+        where: { id: existing.id },
+        data: { status: "OPEN", resolvedOutcome: null, resolvedAt: null },
       });
-      if (claimed.count === 0) {
-        throw new ConcurrencyError("Market is already resolved");
+      res.status(502).json({ error: `Could not resolve the on-chain market: ${revertReason(err) ?? (err as Error).message}` });
+      return;
+    }
+
+    const bets = await prisma.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
+    const readContract = getReadOnlyContract();
+    const payouts = await Promise.all(
+      bets.map(async (_, i) => {
+        const [, , , payoutUnits] = await readContract.getBet(existing.id, i);
+        return fromChainAmount(payoutUnits);
+      }),
+    );
+
+    const bettorIds = [...new Set(bets.map((bet) => bet.userId))];
+    const bettors = await prisma.user.findMany({ where: { id: { in: bettorIds } } });
+    const balanceEntries = await Promise.all(
+      bettors
+        .filter((bettor) => bettor.walletAddress)
+        .map(async (bettor) => [bettor.id, await getOnChainBalance(bettor.walletAddress!)] as const),
+    );
+    const balances = new Map(balanceEntries);
+
+    const market = await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < bets.length; i++) {
+        await tx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
       }
-
-      // Deterministic order (not insertion/row order, which Postgres doesn't
-      // guarantee) so which specific winner absorbs the rounding remainder
-      // below is reproducible rather than arbitrary.
-      const bets = await tx.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
-
-      // Pari-mutuel settlement: winners split the real money wagered (not
-      // the virtual seed liquidity) proportionally to their stake. If nobody
-      // bet on the winning side, every bet is refunded instead (push).
-      const totalPool = bets.reduce((sum, bet) => sum + Number(bet.amount), 0);
-      const winningBets = bets.filter((bet) => bet.side === outcome);
-      const winningPool = winningBets.reduce((sum, bet) => sum + Number(bet.amount), 0);
-
-      const payouts = new Map<string, number>();
-      for (const bet of bets) {
-        if (winningPool === 0) {
-          payouts.set(bet.id, Number(bet.amount));
-        } else if (bet.side === outcome) {
-          payouts.set(bet.id, Math.round((Number(bet.amount) / winningPool) * totalPool * 100) / 100);
-        } else {
-          payouts.set(bet.id, 0);
-        }
+      for (const [userId, walletBalance] of balances) {
+        await tx.user.update({ where: { id: userId }, data: { walletBalance } });
       }
-
-      // Rounding each payout to the cent independently can leave the sum a
-      // cent or two off totalPool; hand that remainder to the last winner so
-      // the payouts always reconcile exactly.
-      if (winningPool > 0 && winningBets.length > 0) {
-        const distributed = winningBets.reduce((sum, bet) => sum + (payouts.get(bet.id) ?? 0), 0);
-        const remainder = Math.round((totalPool - distributed) * 100) / 100;
-        const lastWinner = winningBets[winningBets.length - 1];
-        payouts.set(lastWinner.id, Math.round(((payouts.get(lastWinner.id) ?? 0) + remainder) * 100) / 100);
-      }
-
-      for (const bet of bets) {
-        const payout = payouts.get(bet.id) ?? 0;
-        if (payout > 0) {
-          await tx.user.update({
-            where: { id: bet.userId },
-            data: { walletBalance: { increment: payout } },
-          });
-        }
-        await tx.bet.update({ where: { id: bet.id }, data: { payout } });
-      }
-
       return tx.market.findUniqueOrThrow({ where: { id: existing.id } });
     });
 
     res.json({ market: serializeMarket(market) });
   } catch (err) {
-    if (err instanceof ConcurrencyError) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    throw err;
+    console.error("Market resolved on-chain but syncing Postgres failed:", err);
+    res.status(500).json({ error: "Market resolved on-chain, but syncing the result failed. Check server logs." });
   }
 });

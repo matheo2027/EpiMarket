@@ -19,6 +19,7 @@ export type User = {
   username: string;
   role: Role;
   walletBalance: string;
+  walletAddress: string | null;
   createdAt: string;
 };
 
@@ -48,6 +49,7 @@ export type Bet = {
   amount: string;
   price: string;
   payout: string | null;
+  txHash: string | null;
   createdAt: string;
   userId: string;
   marketId: string;

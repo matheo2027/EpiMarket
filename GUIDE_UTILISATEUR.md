@@ -80,12 +80,14 @@ Un pari ne peut être placé que si le marché est **ouvert** et dans sa **péri
 
 La page **Portefeuille** affiche :
 
-- Votre **solde disponible**, en gros et en évidence.
+- Votre **solde disponible**, en gros et en évidence, ainsi que l'**adresse de votre wallet on-chain**.
 - Votre **historique de paris**, avec deux onglets :
   - **En cours** : paris sur des marchés pas encore résolus.
   - **Passés** : paris sur des marchés résolus, avec le gain reçu (ou 0 € si le pari a perdu).
 
-Chaque ligne de l'historique renvoie vers le marché concerné.
+Chaque pari affiche aussi le **hash de sa transaction on-chain** : la preuve qu'il correspond à une
+vraie transaction sur la blockchain, pas juste une ligne dans une base de données. Chaque ligne de
+l'historique renvoie vers le marché concerné.
 
 ---
 
@@ -114,15 +116,17 @@ Réservé aux comptes avec le rôle **Admin**. Un lien **Admin** apparaît dans 
 
 ### Paris
 
-Liste de tous les paris, tous utilisateurs confondus, avec mise, camp, gain, et statut. Le bouton **Annuler** rembourse intégralement un pari et retire son montant du marché — uniquement possible tant que le marché n'est pas résolu.
+Liste de tous les paris, tous utilisateurs confondus, avec mise, camp, gain, statut et hash de
+transaction. Un pari ne peut pas être annulé une fois placé : la mise est immédiatement verrouillée
+sur la blockchain, il n'existe pas de mécanisme pour la reprendre.
 
 ### Utilisateurs
 
 - Créer un utilisateur (y compris un autre compte admin).
-- Modifier le rôle ou le solde d'un utilisateur existant.
+- Modifier le rôle d'un utilisateur existant.
 - Supprimer un utilisateur — impossible s'il a déjà parié, et impossible de se supprimer soi-même.
 
-Toutes les actions destructrices (conclure, supprimer, annuler) demandent une confirmation via une fenêtre du site avant d'être exécutées.
+Toutes les actions destructrices (conclure, supprimer) demandent une confirmation via une fenêtre du site avant d'être exécutées.
 
 ---
 
@@ -137,8 +141,8 @@ Un marché démarre neutre : sans pari, il n'y a pas encore d'information pour p
 **Pourquoi mon pari a-t-il été refusé alors que le marché semblait ouvert ?**
 Le marché a probablement été résolu entre le moment où vous avez ouvert la page et celui où vous avez validé le pari (ou votre solde est insuffisant). Rechargez la page pour voir son état actuel.
 
-**Puis-je annuler mon propre pari ?**
-Non, seul un administrateur peut annuler un pari (par exemple en cas d'erreur de saisie), et uniquement tant que le marché n'est pas résolu.
+**Puis-je annuler un pari ?**
+Non, ni vous ni un administrateur : une fois placé, un pari verrouille votre mise sur la blockchain et il n'existe aucun mécanisme pour l'annuler. Vérifiez bien votre choix (camp et montant) avant de valider.
 
 **Que veut dire "payout: 0 €" sur un pari passé ?**
 Le pari a perdu — vous n'avez pas récupéré votre mise. C'est différent d'un pari "en attente" (marché pas encore résolu), affiché sans montant.
