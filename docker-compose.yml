@@ -11,5 +11,17 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  hardhat:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    working_dir: /workspace/apps/blockchain
+    volumes:
+      - .:/workspace
+      - hardhat_node_modules:/workspace/apps/blockchain/node_modules
+    ports:
+      - "${HARDHAT_PORT:-8545}:8545"
+    command: ["sh", "docker-entrypoint.sh"]
+
 volumes:
   postgres_data:
+  hardhat_node_modules:

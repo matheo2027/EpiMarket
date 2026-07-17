@@ -5,6 +5,7 @@
     "apps/*"
   ],
   "scripts": {
+    "predev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fix-wsl-docker-offload.ps1",
     "dev": "concurrently -n db,api,web -c blue,green,magenta \"npm:dev:db:wait\" \"npm:dev:api\" \"npm:dev:web\"",
     "dev:db": "docker compose up -d",
     "dev:db:wait": "docker compose up -d && node -e \"setTimeout(()=>{}, 1000)\"",

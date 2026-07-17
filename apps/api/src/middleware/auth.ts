@@ -3,7 +3,6 @@ import { verifyToken, type JwtPayload } from "../jwt.js";
 import { prisma } from "../prisma.js";
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: JwtPayload;
@@ -26,11 +25,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-// Re-checks the role against the database rather than trusting the JWT
-// claim: a token issued before a demotion stays valid for up to 7 days, so
-// trusting req.user.role alone would let a demoted admin keep access. Every
-// place that gates on "is this caller currently an admin" should go through
-// this, not re-check req.user.role directly.
 export async function currentUserRole(userId: string): Promise<"USER" | "ADMIN" | null> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
   return user?.role ?? null;

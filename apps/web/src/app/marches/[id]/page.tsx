@@ -8,9 +8,6 @@ import { BetForm } from "@/components/bet-form";
 import type { Market, PricePoint } from "@/lib/types";
 
 function formatDate(d: string) {
-  // Explicit timeZone: this runs server-side (no "use client"), so without
-  // it the date would render in the server process's timezone instead of a
-  // fixed one, silently shifting the displayed day depending on deployment.
   return new Date(d).toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "long",
