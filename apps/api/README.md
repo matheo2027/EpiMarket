@@ -143,6 +143,7 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 - `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain, paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
 - `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket`).
 - `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
+- Les trois routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
 
 ## Règlement des gains (settlement)
 

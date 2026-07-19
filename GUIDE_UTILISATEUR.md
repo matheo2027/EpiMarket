@@ -154,6 +154,8 @@ Un tableau de bord qui détecte automatiquement les cas où la base de données 
 
 Si tout est cohérent, chaque section affiche simplement une coche verte. Chaque bouton de correction déclenche une vraie action (transaction blockchain ou relecture du solde réel) et demande une confirmation avant de s'exécuter, comme les autres actions sensibles de l'espace admin.
 
+Si vous ouvrez cette page juste après avoir démarré le projet, un message "Blockchain locale en cours de démarrage…" peut s'afficher quelques secondes : la page réessaie toute seule en arrière-plan, pas besoin de recharger.
+
 Toutes les actions destructrices ou irréversibles (conclure, supprimer, resynchroniser) demandent une confirmation via une fenêtre du site avant d'être exécutées.
 
 ---

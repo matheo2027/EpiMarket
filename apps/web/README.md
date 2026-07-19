@@ -46,6 +46,7 @@ src/app/
 - `components/admin-stats.tsx` — bandeau de compteurs globaux en haut des pages admin (`GET /users/stats`).
 - `lib/bet-stats.ts` — calcule les statistiques de la page Profil (taux de réussite, P&L, répartition par catégorie, historique) à partir de la liste brute des paris de l'utilisateur.
 - `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives ou déclenchant une vraie transaction blockchain (conclure, supprimer, resynchroniser).
+- `app/admin/diagnostics/page.tsx` — si `GET /diagnostics` renvoie `503` (blockchain locale pas encore joignable, typiquement juste après `npm run dev`), la page affiche un message d'attente et réessaie automatiquement toutes les 3s (jusqu'à 10 fois) au lieu d'afficher une erreur ; au-delà, un bouton "Réessayer" manuel apparaît.
 
 ## Design
 
