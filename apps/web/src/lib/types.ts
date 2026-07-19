@@ -57,6 +57,23 @@ export type Bet = {
   user?: User;
 };
 
+export type AdminStats = {
+  totalUsers: number;
+  totalMarkets: number;
+  openMarkets: number;
+  resolvedMarkets: number;
+  totalBets: number;
+  totalVolume: string;
+};
+
+export type StatsHistoryPoint = {
+  date: string;
+  openMarkets: number;
+  totalVolume: string;
+  activeBets: number;
+  bettors: number;
+};
+
 export type PricePoint = {
   id: string;
   yesPrice: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
+import { useId, useMemo, useState, type MouseEvent } from "react";
 import type { PricePoint } from "@/lib/types";
 
 const WIDTH = 640;
@@ -14,6 +14,7 @@ const INNER_HEIGHT = HEIGHT - PAD_TOP - PAD_BOTTOM;
 const GRID_LEVELS = [0, 25, 50, 75, 100];
 
 export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
+  const gradientId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const points = useMemo(
@@ -42,6 +43,7 @@ export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
   const y = (v: number) => PAD_TOP + (1 - v / 100) * INNER_HEIGHT;
 
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t).toFixed(2)} ${y(p.yes).toFixed(2)}`).join(" ");
+  const areaPath = `${path} L ${x(points[points.length - 1].t).toFixed(2)} ${HEIGHT - PAD_BOTTOM} L ${x(points[0].t).toFixed(2)} ${HEIGHT - PAD_BOTTOM} Z`;
   const last = points[points.length - 1];
   const hovered = hoverIndex !== null ? points[hoverIndex] : null;
 
@@ -73,6 +75,13 @@ export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIndex(null)}
       >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--yes)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--yes)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {GRID_LEVELS.map((level) => (
           <g key={level}>
             <line
@@ -90,9 +99,25 @@ export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
           </g>
         ))}
 
-        <path d={path} fill="none" className="stroke-yes" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={areaPath} fill={`url(#${gradientId})`} />
 
-        <circle cx={x(last.t)} cy={y(last.yes)} r={3} className="fill-yes" />
+        <path
+          d={path}
+          fill="none"
+          className="stroke-yes"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          style={{ filter: "drop-shadow(0 0 6px var(--yes))" }}
+        />
+
+        <circle
+          cx={x(last.t)}
+          cy={y(last.yes)}
+          r={3}
+          className="fill-yes"
+          style={{ filter: "drop-shadow(0 0 6px var(--yes))" }}
+        />
 
         {hovered && (
           <>

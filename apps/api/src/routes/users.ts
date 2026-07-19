@@ -17,6 +17,27 @@ usersRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
   res.json({ users: users.map(publicUser) });
 });
 
+usersRouter.get("/stats", requireAuth, requireAdmin, async (_req, res) => {
+  const [totalUsers, totalMarkets, openMarkets, totalBets, volumeAgg] = await Promise.all([
+    prisma.user.count(),
+    prisma.market.count(),
+    prisma.market.count({ where: { status: "OPEN" } }),
+    prisma.bet.count(),
+    prisma.market.aggregate({ _sum: { totalVolume: true } }),
+  ]);
+
+  res.json({
+    stats: {
+      totalUsers,
+      totalMarkets,
+      openMarkets,
+      resolvedMarkets: totalMarkets - openMarkets,
+      totalBets,
+      totalVolume: volumeAgg._sum.totalVolume?.toString() ?? "0",
+    },
+  });
+});
+
 usersRouter.get("/:id", requireAuth, async (req, res) => {
   if (req.user!.userId !== req.params.id && (await currentUserRole(req.user!.userId)) !== "ADMIN") {
     res.status(403).json({ error: "Not allowed to view this user" });

@@ -39,6 +39,69 @@ marketsRouter.get("/", async (req, res) => {
   res.json({ markets: markets.map(serializeMarket) });
 });
 
+marketsRouter.get("/stats/history", async (_req, res) => {
+  const [markets, bets] = await Promise.all([
+    prisma.market.findMany({ select: { id: true, createdAt: true, status: true, resolvedAt: true } }),
+    prisma.bet.findMany({ select: { createdAt: true, amount: true, userId: true, marketId: true } }),
+  ]);
+
+  if (markets.length === 0 && bets.length === 0) {
+    res.json({ history: [] });
+    return;
+  }
+
+  const marketById = new Map(markets.map((m) => [m.id, m]));
+
+  const DAY_MS = 86_400_000;
+  const earliestMs = Math.min(
+    ...markets.map((m) => m.createdAt.getTime()),
+    ...bets.map((b) => b.createdAt.getTime()),
+  );
+  const startDay = new Date(earliestMs);
+  startDay.setUTCHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const totalDays = Math.max(Math.round((today.getTime() - startDay.getTime()) / DAY_MS), 0);
+
+  function isOpenAsOf(market: { status: string; resolvedAt: Date | null }, asOf: Date): boolean {
+    return market.status === "OPEN" || market.resolvedAt === null || market.resolvedAt > asOf;
+  }
+
+  const history = [];
+  for (let i = 0; i <= totalDays; i++) {
+    const dayEnd = new Date(startDay.getTime() + i * DAY_MS + DAY_MS - 1);
+
+    let openMarkets = 0;
+    for (const market of markets) {
+      if (market.createdAt > dayEnd) continue;
+      if (isOpenAsOf(market, dayEnd)) openMarkets++;
+    }
+
+    let volumeSum = 0;
+    let activeBets = 0;
+    const bettors = new Set<string>();
+    for (const bet of bets) {
+      if (bet.createdAt > dayEnd) continue;
+      volumeSum += Number(bet.amount);
+      const market = marketById.get(bet.marketId);
+      if (market && isOpenAsOf(market, dayEnd)) {
+        activeBets++;
+        bettors.add(bet.userId);
+      }
+    }
+
+    history.push({
+      date: dayEnd.toISOString(),
+      openMarkets,
+      totalVolume: volumeSum.toFixed(2),
+      activeBets,
+      bettors: bettors.size,
+    });
+  }
+
+  res.json({ history });
+});
+
 marketsRouter.get("/:id", async (req, res) => {
   const market = await prisma.market.findUnique({ where: { id: req.params.id } });
   if (!market) {

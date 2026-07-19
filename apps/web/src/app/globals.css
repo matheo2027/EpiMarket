@@ -1,17 +1,51 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #0b0e14;
-  --surface: #141a26;
-  --surface-raised: #1a2233;
-  --line: #262d40;
-  --paper: #eef0f4;
-  --muted: #8890a6;
-  --yes: #0ca30c;
-  --yes-soft: #123321;
-  --no: #d03b3b;
-  --no-soft: #331616;
-  --brand: #d9a94e;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #0b0d12;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-raised: rgba(255, 255, 255, 0.085);
+  --line: rgba(255, 255, 255, 0.1);
+  --paper: #f2f4f8;
+  --muted: #8b93a7;
+  --yes: #22c55e;
+  --yes-soft: rgba(34, 197, 94, 0.14);
+  --no: #ef4444;
+  --no-soft: rgba(239, 68, 68, 0.14);
+  --brand: #4f8cff;
+  --brand-soft: rgba(79, 140, 255, 0.14);
+  --glow: rgba(79, 140, 255, 0.4);
+  --series-3: #d55181;
+  --series-4: #c98500;
+  --orb-1: #4f8cff;
+  --orb-2: #8b5cf6;
+  --orb-opacity: 0.32;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --ink: #eef1f8;
+  --surface: #ffffff;
+  --surface-raised: #f3f5fb;
+  --line: rgba(15, 23, 42, 0.1);
+  --paper: #10141c;
+  --muted: #5b6478;
+  --yes: #16a34a;
+  --yes-soft: rgba(22, 163, 74, 0.1);
+  --no: #dc2626;
+  --no-soft: rgba(220, 38, 38, 0.1);
+  --brand: #2f6fed;
+  --brand-soft: rgba(47, 111, 237, 0.1);
+  --glow: rgba(47, 111, 237, 0.28);
+  --series-3: #e87ba4;
+  --series-4: #eda100;
+  --orb-1: #2f6fed;
+  --orb-2: #8b5cf6;
+  --orb-opacity: 0.14;
 }
 
 @theme inline {
@@ -26,23 +60,116 @@
   --color-no: var(--no);
   --color-no-soft: var(--no-soft);
   --color-brand: var(--brand);
-  --font-display: var(--font-space-grotesk);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains-mono);
+  --color-brand-soft: var(--brand-soft);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
+  --font-display: var(--font-geist);
+  --font-sans: var(--font-geist);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--ink);
   color: var(--paper);
   font-family: var(--font-sans);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 ::selection {
   background: var(--brand);
-  color: var(--ink);
+  color: white;
 }
 
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* Glass surfaces: every element using the bg-surface / bg-surface-raised
+   utility (already used across ~20 files for cards) automatically picks up
+   a frosted-glass blur, since --surface/-raised are translucent in dark
+   mode. This is additive to the Tailwind-generated utility, not a
+   replacement, so no per-component edits are needed. */
+.bg-surface,
+.bg-surface-raised {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Signature hover: any card/link already using hover:border-brand (market
+   cards, the featured hero, bet rows, admin rows, modal buttons) gains a
+   soft blue glow on hover for free. */
+.hover\:border-brand:hover {
+  box-shadow: 0 0 32px var(--glow);
+}
+
+/* Ambient background orbs: fixed, blurred gradient blobs behind all page
+   content, giving the glass cards something to catch light from. */
+.bg-orbs {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bg-orbs::before,
+.bg-orbs::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(110px);
+  opacity: var(--orb-opacity);
+  transition: opacity 0.3s ease;
+}
+
+.bg-orbs::before {
+  top: -12%;
+  left: -8%;
+  width: 46vw;
+  height: 46vw;
+  background: radial-gradient(circle, var(--orb-1), transparent 70%);
+}
+
+.bg-orbs::after {
+  bottom: -18%;
+  right: -10%;
+  width: 42vw;
+  height: 42vw;
+  background: radial-gradient(circle, var(--orb-2), transparent 70%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bg-orbs::before {
+    animation: orb-drift-a 26s ease-in-out infinite alternate;
+  }
+  .bg-orbs::after {
+    animation: orb-drift-b 30s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes orb-drift-a {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(4vw, 6vh);
+  }
+}
+
+@keyframes orb-drift-b {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-5vw, -4vh);
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

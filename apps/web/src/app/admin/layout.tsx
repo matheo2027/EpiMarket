@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { AdminStatsBar } from "@/components/admin-stats";
 
 const TABS = [
   { href: "/admin/marches", label: "Marchés" },
@@ -31,7 +32,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Administration</h1>
-      <nav className="mt-6 flex gap-2 border-b border-line pb-4">
+      <div className="mt-6">
+        <AdminStatsBar />
+      </div>
+      <nav className="flex gap-2 border-b border-line pb-4">
         {TABS.map((tab) => (
           <Link
             key={tab.href}
