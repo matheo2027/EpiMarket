@@ -62,6 +62,7 @@ export function BetForm({ market }: { market: Market }) {
 
   const numericAmount = Number(amount);
   const estimatedPayout = estimatePayout(market, side, numericAmount);
+  const failedTxHash = error?.match(/tx (0x[a-fA-F0-9]+)/)?.[1] ?? null;
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -136,7 +137,19 @@ export function BetForm({ market }: { market: Market }) {
         Estimation au prix actuel — le montant réel dépend des paris placés avant la clôture du marché.
       </p>
 
-      {error && <p className="rounded-lg border border-no/30 bg-no-soft px-3.5 py-2.5 text-sm text-no">{error}</p>}
+      {error && (
+        <div className="rounded-lg border border-no/30 bg-no-soft px-3.5 py-2.5 text-sm text-no">
+          <p>{error}</p>
+          {failedTxHash && (
+            <Link
+              href={`/support?txHash=${failedTxHash}&marketId=${market.id}`}
+              className="mt-1.5 inline-block font-medium underline"
+            >
+              Créer un ticket →
+            </Link>
+          )}
+        </div>
+      )}
       {success && (
         <p className="rounded-lg border border-yes/30 bg-yes-soft px-3.5 py-2.5 text-sm text-yes">{success}</p>
       )}

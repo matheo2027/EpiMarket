@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
-import type { Market } from "@/lib/types";
+import type { Market, StatsHistoryPoint } from "@/lib/types";
 import { MarketCard } from "@/components/market-card";
 import { CategoryBadge } from "@/components/category-badge";
 import { SplitBar } from "@/components/split-bar";
+import { StatCarousel } from "@/components/stat-carousel";
 
 async function getOpenMarkets(): Promise<Market[] | null> {
   try {
@@ -14,8 +15,17 @@ async function getOpenMarkets(): Promise<Market[] | null> {
   }
 }
 
+async function getStatsHistory(): Promise<StatsHistoryPoint[]> {
+  try {
+    const data = await apiFetch<{ history: StatsHistoryPoint[] }>("/markets/stats/history");
+    return data.history;
+  } catch {
+    return [];
+  }
+}
+
 export default async function HomePage() {
-  const markets = await getOpenMarkets();
+  const [markets, history] = await Promise.all([getOpenMarkets(), getStatsHistory()]);
 
   if (markets === null) {
     return (
@@ -42,6 +52,12 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
+      {history.length >= 2 && (
+        <div className="mb-8">
+          <StatCarousel history={history} />
+        </div>
+      )}
+
       <Link
         href={`/marches/${featured.id}`}
         className="group block rounded-3xl border border-line bg-surface p-8 transition-colors hover:border-brand sm:p-10"

@@ -32,6 +32,12 @@ enum BetSide {
   NO
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
@@ -44,7 +50,8 @@ model User {
   walletAddress       String? @unique
   encryptedPrivateKey String?
 
-  bets Bet[]
+  bets    Bet[]
+  tickets Ticket[]
 }
 
 model Market {
@@ -68,6 +75,7 @@ model Market {
 
   bets        Bet[]
   pricePoints PricePoint[]
+  tickets     Ticket[]
 }
 
 model Bet {
@@ -85,6 +93,8 @@ model Bet {
   marketId String
   market   Market @relation(fields: [marketId], references: [id])
 
+  tickets Ticket[]
+
   @@index([userId])
   @@index([marketId])
 }
@@ -98,4 +108,27 @@ model PricePoint {
   market   Market @relation(fields: [marketId], references: [id])
 
   @@index([marketId, timestamp])
+}
+
+model Ticket {
+  id         String       @id @default(cuid())
+  subject    String
+  message    String
+  status     TicketStatus @default(OPEN)
+  adminNote  String?
+  txHash     String?
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  betId String?
+  bet   Bet?    @relation(fields: [betId], references: [id])
+
+  marketId String?
+  market   Market? @relation(fields: [marketId], references: [id])
+
+  @@index([userId])
+  @@index([status])
 }

@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../prisma.js";
 import { signToken } from "../jwt.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -9,6 +10,14 @@ import { provisionNewWallet } from "../blockchain/contract.js";
 export const authRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Please try again later." },
+});
 
 export function publicUser(user: {
   id: string;
@@ -30,7 +39,7 @@ export function publicUser(user: {
   };
 }
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", authLimiter, async (req, res) => {
   const { email, username, password } = req.body ?? {};
 
   if (typeof email !== "string" || !EMAIL_RE.test(email)) {
@@ -84,7 +93,7 @@ authRouter.post("/register", async (req, res) => {
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authLimiter, async (req, res) => {
   const { email, password } = req.body ?? {};
 
   if (typeof email !== "string" || typeof password !== "string") {

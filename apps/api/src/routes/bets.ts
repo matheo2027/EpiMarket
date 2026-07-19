@@ -78,41 +78,53 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     return;
   }
 
-  const onChainMarket = await getReadOnlyContract().markets(market.id);
-  const newBalance = await getOnChainBalance(walletAddress);
+  const settledAmount = fromChainAmount(toChainAmount(amount));
 
-  const { bet, updatedMarket } = await prisma.$transaction(async (tx) => {
-    const bet = await tx.bet.create({
-      data: {
-        userId: user.id,
-        marketId: market.id,
-        side: betSide,
-        amount,
-        price: betSide === "YES" ? priceAtBet : noPriceAtBet,
-        txHash,
-      },
+  try {
+    const onChainMarket = await getReadOnlyContract().markets(market.id);
+    const newBalance = await getOnChainBalance(walletAddress);
+
+    const { bet, updatedMarket } = await prisma.$transaction(async (tx) => {
+      const bet = await tx.bet.create({
+        data: {
+          userId: user.id,
+          marketId: market.id,
+          side: betSide,
+          amount: settledAmount,
+          price: betSide === "YES" ? priceAtBet : noPriceAtBet,
+          txHash,
+        },
+      });
+
+      const updatedMarket = await tx.market.update({
+        where: { id: market.id },
+        data: {
+          yesPool: fromChainAmount(onChainMarket.yesPool),
+          noPool: fromChainAmount(onChainMarket.noPool),
+          totalVolume: fromChainAmount(onChainMarket.totalVolume),
+        },
+      });
+
+      const newPrices = computePrices(updatedMarket);
+      await tx.pricePoint.create({ data: { marketId: market.id, yesPrice: newPrices.yesPrice } });
+      await tx.user.update({ where: { id: user.id }, data: { walletBalance: newBalance } });
+
+      return { bet, updatedMarket };
     });
 
-    const updatedMarket = await tx.market.update({
-      where: { id: market.id },
-      data: {
-        yesPool: fromChainAmount(onChainMarket.yesPool),
-        noPool: fromChainAmount(onChainMarket.noPool),
-        totalVolume: fromChainAmount(onChainMarket.totalVolume),
-      },
+    res.status(201).json({
+      bet,
+      market: { ...updatedMarket, ...computePrices(updatedMarket) },
     });
-
-    const newPrices = computePrices(updatedMarket);
-    await tx.pricePoint.create({ data: { marketId: market.id, yesPrice: newPrices.yesPrice } });
-    await tx.user.update({ where: { id: user.id }, data: { walletBalance: newBalance } });
-
-    return { bet, updatedMarket };
-  });
-
-  res.status(201).json({
-    bet,
-    market: { ...updatedMarket, ...computePrices(updatedMarket) },
-  });
+  } catch (err) {
+    console.error(
+      `Bet placed on-chain (tx ${txHash}) but syncing it to the database failed — user ${user.id}, market ${market.id}, side ${betSide}, amount ${settledAmount}:`,
+      err,
+    );
+    res.status(500).json({
+      error: `Your bet was placed on-chain (tx ${txHash}) but could not be recorded. Contact an admin with this transaction hash.`,
+    });
+  }
 });
 
 betsRouter.get("/", requireAuth, async (req, res) => {

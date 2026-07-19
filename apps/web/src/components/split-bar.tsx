@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnimatedNumber } from "@/components/animated-number";
 
 type SplitBarProps = {
   yesPrice: number;
@@ -29,17 +30,21 @@ export function SplitBar({ yesPrice, size = "sm", animateIn = false }: SplitBarP
     <div className="w-full">
       <div className={`flex w-full overflow-hidden rounded-full bg-line ${barHeight}`}>
         <div
-          className="bg-yes transition-[width] duration-700 ease-out"
+          className="bg-yes shadow-[0_0_16px_var(--yes)] transition-[width] duration-700 ease-out"
           style={{ width: `${displayYesPct}%` }}
         />
         <div
-          className="bg-no transition-[width] duration-700 ease-out"
+          className="bg-no shadow-[0_0_16px_var(--no)] transition-[width] duration-700 ease-out"
           style={{ width: `${noPct}%` }}
         />
       </div>
-      <div className={`mt-1.5 flex justify-between font-mono tabular-nums ${labelSize}`}>
-        <span className="text-yes">OUI {targetYesPct}%</span>
-        <span className="text-no">NON {100 - targetYesPct}%</span>
+      <div className={`mt-1.5 flex items-center justify-between font-mono tabular-nums ${labelSize}`}>
+        <span className="text-yes">
+          OUI <AnimatedNumber value={targetYesPct} format={(n) => `${Math.round(n)}%`} />
+        </span>
+        <span className="text-no">
+          NON <AnimatedNumber value={100 - targetYesPct} format={(n) => `${Math.round(n)}%`} />
+        </span>
       </div>
     </div>
   );

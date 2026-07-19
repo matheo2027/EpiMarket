@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch, errorMessage } from "@/lib/api";
 import type { Bet } from "@/lib/types";
 import { CategoryBadge } from "@/components/category-badge";
 import { truncateHash } from "@/lib/format";
+import { computeBetStats } from "@/lib/bet-stats";
+import { ProfileStats } from "@/components/profile-stats";
+import { PnlChart } from "@/components/pnl-chart";
+import { CategoryBreakdown } from "@/components/category-breakdown";
 
 type Tab = "ongoing" | "past";
 
@@ -64,17 +68,26 @@ function BetRow({ bet }: { bet: Bet }) {
 export default function PortefeuillePage() {
   const { user, token, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("ongoing");
-  const [bets, setBets] = useState<Bet[] | null>(null);
+  const [allBets, setAllBets] = useState<Bet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
-    setBets(null);
+    setAllBets(null);
     setError(null);
-    apiFetch<{ bets: Bet[] }>(`/bets?status=${tab}`, { token })
-      .then((data) => setBets(data.bets))
+    apiFetch<{ bets: Bet[] }>("/bets", { token })
+      .then((data) => setAllBets(data.bets))
       .catch((err) => setError(errorMessage(err)));
-  }, [token, tab]);
+  }, [token]);
+
+  const bets = useMemo(() => {
+    if (!allBets) return null;
+    return allBets.filter((bet) =>
+      tab === "ongoing" ? bet.market?.status === "OPEN" : bet.market?.status === "RESOLVED",
+    );
+  }, [allBets, tab]);
+
+  const stats = useMemo(() => (allBets ? computeBetStats(allBets) : null), [allBets]);
 
   if (loading) return null;
 
@@ -101,7 +114,7 @@ export default function PortefeuillePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Portefeuille</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">Profil</h1>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface p-6">
         <p className="text-sm text-muted">Solde disponible</p>
@@ -112,6 +125,19 @@ export default function PortefeuillePage() {
           </p>
         )}
       </div>
+
+      {stats && (
+        <div className="mt-8 flex flex-col gap-6">
+          <ProfileStats stats={stats} />
+          <PnlChart points={stats.history} />
+          <div>
+            <h2 className="font-display text-lg font-semibold tracking-tight">Répartition par catégorie</h2>
+            <div className="mt-3">
+              <CategoryBreakdown breakdown={stats.categoryBreakdown} />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 flex gap-2">
         <button onClick={() => setTab("ongoing")} className={tabClass(tab === "ongoing")}>

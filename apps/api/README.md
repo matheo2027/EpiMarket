@@ -94,22 +94,55 @@ Historique du prix d'un marché, pour le graphe d'évolution du prix.
 
 Un `PricePoint` est créé à chaque pari pour tracer la courbe.
 
+### `Ticket`
+
+Un signalement de problème créé par un utilisateur (ex. solde qui ne correspond pas, pari qui n'apparaît pas), traité par un admin.
+
+| Champ         | Type           | Notes                                                        |
+| ------------- | -------------- | -------------------------------------------------------------- |
+| `id`            | `String`       | cuid                                                            |
+| `subject`       | `String`       | résumé du problème                                              |
+| `message`       | `String`       | description                                                     |
+| `status`        | `TicketStatus` | `OPEN` \| `IN_PROGRESS` \| `RESOLVED`                             |
+| `adminNote`     | `String?`      | réponse/note laissée par l'admin qui traite le ticket           |
+| `txHash`        | `String?`      | hash de transaction lié, si le ticket vient d'une erreur de pari |
+| `createdAt`     | `DateTime`     |                                                                  |
+| `resolvedAt`    | `DateTime?`    | posé automatiquement au passage à `RESOLVED`                     |
+| `userId`        | `String`       | FK vers `User`, auteur du ticket                                |
+| `betId`         | `String?`      | FK optionnelle vers `Bet`, si le ticket concerne un pari précis  |
+| `marketId`      | `String?`      | FK optionnelle vers `Market`                                    |
+
 ## Routes
 
-- `POST /auth/register`, `POST /auth/login`, `GET /auth/me`
+- `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
+  tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force.
 - `GET /markets`, `GET /markets/:id` — public
 - `GET /markets/:id/price-history` — public, liste des `PricePoint` triés par date (pour le graphe d'évolution). Un point à 0.5 est créé automatiquement à la création du marché.
-- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin. `PATCH`/`DELETE` refusés si le marché est déjà résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer).
+- `GET /markets/stats/history` — public, série quotidienne (marchés ouverts, volume, paris actifs,
+  parieurs distincts) reconstruite depuis l'historique des marchés/paris existants, pour les courbes de
+  la page d'accueil.
+- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin. `PATCH`/`DELETE` refusés si le marché est déjà résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer). `POST /:id/resolve` est rappelable sans effet de bord : si un premier appel a résolu le marché on-chain mais échoué à synchroniser les gains/soldes en Postgres, un second appel avec le même `outcome` reprend uniquement la synchronisation au lieu de renvoyer une erreur bloquante (voir aussi `POST /diagnostics/resync-*` plus bas, qui s'appuie sur ce même mécanisme).
 - `POST /bets` — placer un pari (utilisateur connecté, refusé avec `403` pour un compte `ADMIN` — voir
   plus bas). Signe et envoie un vrai `placeBet` on-chain avec le wallet custodial de l'utilisateur,
   attend la confirmation, puis reflète le résultat en Postgres (pools/volume/solde relus depuis le
-  contrat, jamais recalculés en TS) dans une seule transaction Postgres. Un revert Solidity (solde
-  insuffisant, marché fermé...) devient un 400 avec le message du contrat.
+  contrat, jamais recalculés en TS) dans une seule transaction Postgres, elle-même protégée par un
+  `try/catch` : si la synchro échoue après une transaction on-chain déjà confirmée, l'API répond avec le
+  `txHash` de la transaction plutôt qu'une erreur générique, pour que l'utilisateur puisse le signaler
+  (voir `POST /tickets`). Un revert Solidity (solde insuffisant, marché fermé...) devient un 400 avec le
+  message du contrat.
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
 - `GET /users/:id` — soi-même ou admin
+- `GET /users/stats` — (admin) compteurs globaux (utilisateurs, marchés ouverts/résolus, paris, volume) pour le bandeau en haut des pages admin.
+- `POST /tickets` — créer un ticket de support (utilisateur connecté), avec `betId`/`marketId`/`txHash` optionnels pour le lier à un pari précis.
+- `GET /tickets` — les tickets de l'utilisateur connecté ; `GET /tickets?all=true` (admin) — tous les tickets, avec l'auteur.
+- `GET /tickets/:id` — un ticket (propriétaire ou admin).
+- `PATCH /tickets/:id` — (admin) changer le `status` et/ou `adminNote` ; pose `resolvedAt` automatiquement en passant à `RESOLVED`.
+- `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain, paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
+- `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket`).
+- `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
 
 ## Règlement des gains (settlement)
 
@@ -184,7 +217,8 @@ déploiement. Ici, le résumé côté backend :
 
 ```
 User ──< Bet >── Market ──< PricePoint
+User ──< Ticket >── (Bet, Market optionnels)
 ```
 
-- Un `User` peut avoir plusieurs `Bet`.
-- Un `Market` peut avoir plusieurs `Bet` et plusieurs `PricePoint`.
+- Un `User` peut avoir plusieurs `Bet` et plusieurs `Ticket`.
+- Un `Market` peut avoir plusieurs `Bet`, plusieurs `PricePoint`, et être référencé par des `Ticket`.
