@@ -34,7 +34,7 @@ Compte utilisateur + portefeuille virtuel.
 | `passwordHash`   | `String`   | bcrypt, jamais le mot de passe en clair |
 | `role`           | `Role`     | `USER` \| `ADMIN`                       |
 | `walletBalance`  | `Decimal`  | miroir du solde on-chain réel (0 par défaut, mis à jour après chaque mint/pari/résolution — voir `syncUserBalance`, section Intégration blockchain plus bas) |
-| `walletAddress`  | `String?`  | adresse du wallet custodial on-chain, en clair. Nullable (lignes existantes avant l'ajout du POC blockchain, ex. l'admin seedé) |
+| `walletAddress`  | `String?`  | adresse du wallet custodial on-chain, en clair. Nullable : lignes existantes avant l'ajout du POC blockchain, et surtout tout compte `ADMIN` (jamais provisionné, voir plus bas) |
 | `encryptedPrivateKey` | `String?` | clé privée du wallet, chiffrée au repos (AES-256-GCM, voir `src/blockchain/wallet.ts`). Jamais renvoyée par l'API |
 | `createdAt`      | `DateTime` |                                         |
 
@@ -100,11 +100,11 @@ Un `PricePoint` est créé à chaque pari pour tracer la courbe.
 - `GET /markets`, `GET /markets/:id` — public
 - `GET /markets/:id/price-history` — public, liste des `PricePoint` triés par date (pour le graphe d'évolution). Un point à 0.5 est créé automatiquement à la création du marché.
 - `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin. `PATCH`/`DELETE` refusés si le marché est déjà résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer).
-- `POST /bets` — placer un pari (utilisateur connecté). Signe et envoie un vrai `placeBet` on-chain
-  avec le wallet custodial de l'utilisateur, attend la confirmation, puis reflète le résultat en
-  Postgres (pools/volume/solde relus depuis le contrat, jamais recalculés en TS) dans une seule
-  transaction Postgres. Un revert Solidity (solde insuffisant, marché fermé...) devient un 400 avec le
-  message du contrat.
+- `POST /bets` — placer un pari (utilisateur connecté, refusé avec `403` pour un compte `ADMIN` — voir
+  plus bas). Signe et envoie un vrai `placeBet` on-chain avec le wallet custodial de l'utilisateur,
+  attend la confirmation, puis reflète le résultat en Postgres (pools/volume/solde relus depuis le
+  contrat, jamais recalculés en TS) dans une seule transaction Postgres. Un revert Solidity (solde
+  insuffisant, marché fermé...) devient un 400 avec le message du contrat.
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
@@ -172,6 +172,12 @@ déploiement. Ici, le résumé côté backend :
     (garde rapide, sans aller-retour chaîne, contre un double-clic sur "Conclure") — mais la vraie
     garantie anti-double-résolution est le `require(!market.resolved)` du contrat.
   - Inscription / création d'utilisateur : la création est protégée par la contrainte d'unicité de la base (capturée via le code d'erreur Prisma `P2002`), pas seulement par une vérification préalable.
+- **Un admin ne peut pas parier.** Un admin peut créer et résoudre un marché ; s'il pouvait aussi
+  parier dessus, il pourrait miser puis résoudre en sa faveur (conflit d'intérêt). `POST /bets` renvoie
+  `403` si `user.role === "ADMIN"` (`src/routes/bets.ts`). Pour que ça reste vrai même en cas de bug
+  d'autorisation, un compte `ADMIN` n'a **jamais** de wallet custodial provisionné (`walletAddress`/
+  `encryptedPrivateKey` restent `null` — `POST /users` dans `src/routes/users.ts` saute la génération de
+  wallet et le mint pour ce rôle), donc il n'a de toute façon rien à miser.
 - **Aucune requête ne peut faire planter le serveur.** `express-async-errors` est importé en premier dans `src/index.ts` pour qu'une promesse rejetée dans une route `async` soit automatiquement transmise au middleware d'erreur final, qui répond `500` proprement au lieu de laisser le process planter (Express 4 ne le fait pas nativement).
 
 ## Diagramme

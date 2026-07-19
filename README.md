@@ -70,6 +70,18 @@ npm run dev:api   # API Express
 npm run dev:web   # Next.js
 ```
 
+Pour tout arrêter proprement (processus API/Web + conteneurs Docker) :
+
+```bash
+npm run stop
+```
+
+Ou pour tout arrêter puis relancer en une seule commande :
+
+```bash
+npm run restart
+```
+
 Au premier lancement, appliquez les migrations et créez un compte admin de test :
 
 ```bash
@@ -78,13 +90,15 @@ npx prisma migrate dev
 npm run db:seed   # crée admin@epitech.eu / admin1234
 ```
 
-Sur Windows, `npm run dev` lance aussi un script (`scripts/fix-wsl-docker-offload.ps1`) qui vérifie et corrige automatiquement un bug réseau connu de WSL2/Docker Desktop (voir le script pour le détail) — sans effet sur les autres plateformes.
+Sur Windows, `npm run dev` lance aussi un script (`scripts/fix-wsl-docker-offload.ps1`) qui vérifie et corrige automatiquement un bug réseau connu de WSL2/Docker Desktop (voir le script pour le détail) — sans effet sur les autres plateformes. Il redémarre aussi systématiquement le conteneur `postgres` après le `docker compose up -d` (`dev:db:wait`) : après un cycle WSL2, Docker peut afficher le conteneur comme `Running` alors que le port-forward réseau vers `localhost:5432` est resté cassé — un simple restart le rétablit.
+
+`npm run stop`/`npm run restart` reposent eux aussi sur un script PowerShell (`scripts/stop-dev.ps1`), spécifique à Windows.
 
 ## Fonctionnalités
 
 **Côté utilisateur** : inscription/connexion, portefeuille (wallet on-chain, 1000 tokens de départ), parcourir les marchés (filtres catégorie/statut), placer un pari (oui/non, vraie transaction on-chain), historique des paris avec hash de transaction (en cours / passés), graphe d'évolution du prix.
 
-**Côté admin** (`/admin`, compte avec `role: ADMIN`) : CRUD marché (créer/éditer/supprimer — un marché résolu ne peut plus être ni édité ni supprimé), conclure un marché (règle les gains automatiquement via le contrat), liste des paris, CRUD utilisateurs.
+**Côté admin** (`/admin`, compte avec `role: ADMIN`) : CRUD marché (créer/éditer/supprimer — un marché résolu ne peut plus être ni édité ni supprimé), conclure un marché (règle les gains automatiquement via le contrat), liste des paris, CRUD utilisateurs. Un admin n'a pas de portefeuille et ne peut pas parier (il peut créer/résoudre les marchés, donc pas parier dessus sans conflit d'intérêt).
 
 ## Structure
 

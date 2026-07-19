@@ -107,6 +107,8 @@ C'est pour cette raison que le "gain estimé" affiché avant de parier est une e
 
 Réservé aux comptes avec le rôle **Admin**. Un lien **Admin** apparaît dans le header pour ces comptes, menant à `/admin`.
 
+Un compte Admin n'a **pas de portefeuille** et **ne peut pas parier** : il n'y a ni page Portefeuille, ni solde affiché, ni wallet on-chain provisionné pour ce rôle. C'est voulu — un admin peut créer et résoudre des marchés, il ne doit donc pas pouvoir parier dessus (conflit d'intérêt).
+
 ### Marchés
 
 - **+ Nouveau marché** : titre, description, description du "oui", description du "non", catégorie, date de début, date de clôture.

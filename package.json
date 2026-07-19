@@ -11,7 +11,9 @@
     "dev:db:wait": "docker compose up -d && docker compose restart postgres && node -e \"setTimeout(()=>{}, 1000)\"",
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-dev.ps1",
+    "restart": "npm run stop && npm run dev"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
