@@ -57,6 +57,46 @@ export type Bet = {
   user?: User;
 };
 
+export type TicketStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED";
+
+export type Ticket = {
+  id: string;
+  subject: string;
+  message: string;
+  status: TicketStatus;
+  adminNote: string | null;
+  txHash: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  userId: string;
+  betId: string | null;
+  marketId: string | null;
+  user?: Pick<User, "id" | "email" | "username">;
+  bet?: Bet | null;
+  market?: Pick<Market, "id" | "title"> | null;
+};
+
+export type UnsyncedMarket = { id: string; title: string };
+
+export type StuckBet = Bet & {
+  market: Pick<Market, "id" | "title" | "resolvedOutcome">;
+  user: Pick<User, "id" | "username">;
+};
+
+export type BalanceDrift = { id: string; username: string; dbBalance: number; onChainBalance: number };
+
+export type DiagnosticsReport = {
+  unsyncedMarkets: UnsyncedMarket[];
+  stuckBets: StuckBet[];
+  balanceDrift: BalanceDrift[];
+};
+
+export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  OPEN: "Ouvert",
+  IN_PROGRESS: "En cours",
+  RESOLVED: "Résolu",
+};
+
 export type AdminStats = {
   totalUsers: number;
   totalMarkets: number;

@@ -7,6 +7,8 @@ import { authRouter } from "./routes/auth.js";
 import { betsRouter } from "./routes/bets.js";
 import { marketsRouter } from "./routes/markets.js";
 import { usersRouter } from "./routes/users.js";
+import { ticketsRouter } from "./routes/tickets.js";
+import { diagnosticsRouter } from "./routes/diagnostics.js";
 
 const app = express();
 const allowedOrigins = (process.env.FRONTEND_URL ?? "http://localhost:3000").split(",");
@@ -17,13 +19,16 @@ app.use("/auth", authRouter);
 app.use("/markets", marketsRouter);
 app.use("/bets", betsRouter);
 app.use("/users", usersRouter);
+app.use("/tickets", ticketsRouter);
+app.use("/diagnostics", diagnosticsRouter);
 
 app.get("/health", async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: "ok", db: "connected" });
   } catch (err) {
-    res.status(500).json({ status: "error", db: "disconnected", message: (err as Error).message });
+    console.error("Health check failed:", err);
+    res.status(500).json({ status: "error", db: "disconnected", message: "Database connection failed" });
   }
 });
 

@@ -81,3 +81,24 @@ export function revertReason(err: unknown): string | undefined {
   const e = err as { reason?: string; shortMessage?: string };
   return e?.reason ?? e?.shortMessage;
 }
+
+const TRANSIENT_ERROR_CODES = new Set([
+  "NETWORK_ERROR",
+  "SERVER_ERROR",
+  "TIMEOUT",
+  "ECONNREFUSED",
+  "ECONNRESET",
+]);
+
+/**
+ * True when `err` looks like the Hardhat RPC node not being reachable yet — the
+ * common case being a `docker compose up` where Postgres/the API come up before
+ * Hardhat has finished booting and deploying the contract. This is transient and
+ * usually resolves itself within a few seconds, so callers can surface it as
+ * "retry shortly" rather than a hard failure.
+ */
+export function isBlockchainUnavailable(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  if (e?.code && TRANSIENT_ERROR_CODES.has(e.code)) return true;
+  return /detect network|could not detect network|econnrefused|econnreset|socket hang up/i.test(e?.message ?? "");
+}

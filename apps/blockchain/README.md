@@ -72,3 +72,10 @@ documentés — c'est volontaire : le compte #0 sert de compte owner/funder côt
   chaque compte — pas de vraie économie de gas à gérer.
 - Un seul compte owner/déployeur contrôle `mint`/`createMarket`/`resolveMarket` : point de
   centralisation acceptable pour un POC pédagogique, à ne pas reproduire tel quel en production.
+- **Le nœud Hardhat ne persiste pas son état** : chaque redémarrage du service `hardhat` (ou de
+  `npx hardhat node`) repart d'une chaîne vierge et redéploie le contrat à une nouvelle adresse — tous
+  les marchés/soldes existants sur l'ancienne chaîne disparaissent, alors que Postgres garde ses lignes
+  telles quelles. C'est la source la plus fréquente de désynchronisation rencontrée en développement.
+  Le tableau de bord admin **Diagnostics** (`/admin/diagnostics`, voir `apps/web/README.md`) détecte ce
+  cas (marché absent on-chain, solde qui a dérivé) et propose une correction en un clic plutôt que de
+  nécessiter une intervention manuelle en base.

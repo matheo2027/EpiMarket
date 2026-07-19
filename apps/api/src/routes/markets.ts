@@ -61,7 +61,8 @@ marketsRouter.get("/stats/history", async (_req, res) => {
   startDay.setUTCHours(0, 0, 0, 0);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  const totalDays = Math.max(Math.round((today.getTime() - startDay.getTime()) / DAY_MS), 0);
+  const MAX_HISTORY_DAYS = 3650;
+  const totalDays = Math.min(Math.max(Math.round((today.getTime() - startDay.getTime()) / DAY_MS), 0), MAX_HISTORY_DAYS);
 
   function isOpenAsOf(market: { status: string; resolvedAt: Date | null }, asOf: Date): boolean {
     return market.status === "OPEN" || market.resolvedAt === null || market.resolvedAt > asOf;
@@ -176,8 +177,9 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
     const tx = await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
     await tx.wait();
   } catch (err) {
+    console.error(`Could not create on-chain market ${market.id}:`, err);
     await prisma.market.delete({ where: { id: market.id } });
-    res.status(502).json({ error: `Could not create the on-chain market: ${revertReason(err) ?? (err as Error).message}` });
+    res.status(502).json({ error: revertReason(err) ?? "Could not create the on-chain market" });
     return;
   }
 
@@ -198,10 +200,34 @@ marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
   const { title, description, yesDescription, noDescription, category, startDate, endDate } = req.body ?? {};
   const data: Record<string, unknown> = {};
 
-  if (title !== undefined) data.title = title;
-  if (description !== undefined) data.description = description;
-  if (yesDescription !== undefined) data.yesDescription = yesDescription;
-  if (noDescription !== undefined) data.noDescription = noDescription;
+  if (title !== undefined) {
+    if (typeof title !== "string" || title.trim().length < 3) {
+      res.status(400).json({ error: "Title must be at least 3 characters" });
+      return;
+    }
+    data.title = title.trim();
+  }
+  if (description !== undefined) {
+    if (typeof description !== "string" || description.trim().length === 0) {
+      res.status(400).json({ error: "Description is required" });
+      return;
+    }
+    data.description = description;
+  }
+  if (yesDescription !== undefined) {
+    if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
+      res.status(400).json({ error: "yesDescription is required" });
+      return;
+    }
+    data.yesDescription = yesDescription;
+  }
+  if (noDescription !== undefined) {
+    if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
+      res.status(400).json({ error: "noDescription is required" });
+      return;
+    }
+    data.noDescription = noDescription;
+  }
   if (category !== undefined) {
     if (!CATEGORIES.includes(category as MarketCategory)) {
       res.status(400).json({ error: `category must be one of ${CATEGORIES.join(", ")}` });
@@ -209,8 +235,22 @@ marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     }
     data.category = category;
   }
-  if (startDate !== undefined) data.startDate = new Date(startDate);
-  if (endDate !== undefined) data.endDate = new Date(endDate);
+  if (startDate !== undefined) {
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) {
+      res.status(400).json({ error: "Invalid startDate" });
+      return;
+    }
+    data.startDate = start;
+  }
+  if (endDate !== undefined) {
+    const end = new Date(endDate);
+    if (Number.isNaN(end.getTime())) {
+      res.status(400).json({ error: "Invalid endDate" });
+      return;
+    }
+    data.endDate = end;
+  }
 
   const market = await prisma.market.update({ where: { id: req.params.id }, data });
   res.json({ market: serializeMarket(market) });
@@ -250,33 +290,52 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
     res.status(404).json({ error: "Market not found" });
     return;
   }
-  if (existing.status === "RESOLVED") {
-    res.status(400).json({ error: "Market is already resolved" });
-    return;
-  }
 
-  try {
-    const claimed = await prisma.market.updateMany({
-      where: { id: existing.id, status: "OPEN" },
-      data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
-    });
-    if (claimed.count === 0) {
+  let resync = false;
+  if (existing.status === "RESOLVED") {
+    const unsyncedCount = await prisma.bet.count({ where: { marketId: existing.id, payout: null } });
+    if (unsyncedCount === 0) {
       res.status(400).json({ error: "Market is already resolved" });
       return;
     }
-
-    try {
-      const tx = await runAsOwner((nonce) =>
-        getOwnerContract().resolveMarket(existing.id, sideToOutcome(outcome), { nonce }),
-      );
-      await tx.wait();
-    } catch (err) {
-      await prisma.market.update({
-        where: { id: existing.id },
-        data: { status: "OPEN", resolvedOutcome: null, resolvedAt: null },
+    if (existing.resolvedOutcome !== outcome) {
+      res.status(409).json({
+        error: `Market already resolved on-chain as ${existing.resolvedOutcome}; resend with that outcome to retry syncing payouts.`,
       });
-      res.status(502).json({ error: `Could not resolve the on-chain market: ${revertReason(err) ?? (err as Error).message}` });
       return;
+    }
+    // The market resolved on-chain successfully on a previous call, but syncing
+    // payouts/balances to Postgres failed partway through — retry just that part
+    // instead of leaving it permanently stuck (the earlier call already committed
+    // status: RESOLVED, so we can't re-claim or re-run the on-chain tx here).
+    resync = true;
+  }
+
+  try {
+    if (!resync) {
+      const claimed = await prisma.market.updateMany({
+        where: { id: existing.id, status: "OPEN" },
+        data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        res.status(400).json({ error: "Market is already resolved" });
+        return;
+      }
+
+      try {
+        const tx = await runAsOwner((nonce) =>
+          getOwnerContract().resolveMarket(existing.id, sideToOutcome(outcome), { nonce }),
+        );
+        await tx.wait();
+      } catch (err) {
+        console.error(`Could not resolve on-chain market ${existing.id}:`, err);
+        await prisma.market.update({
+          where: { id: existing.id },
+          data: { status: "OPEN", resolvedOutcome: null, resolvedAt: null },
+        });
+        res.status(502).json({ error: revertReason(err) ?? "Could not resolve the on-chain market" });
+        return;
+      }
     }
 
     const bets = await prisma.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });

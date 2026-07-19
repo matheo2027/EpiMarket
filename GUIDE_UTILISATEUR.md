@@ -9,8 +9,9 @@ Ce guide explique comment utiliser le site, côté visiteur/parieur et côté ad
 - [Parcourir les marchés](#parcourir-les-marchés)
 - [Comprendre un marché](#comprendre-un-marché)
 - [Placer un pari](#placer-un-pari)
-- [Le portefeuille](#le-portefeuille)
+- [Le Profil](#le-profil)
 - [Comment sont calculés les gains](#comment-sont-calculés-les-gains)
+- [Signaler un problème](#signaler-un-problème)
 - [Espace administrateur](#espace-administrateur)
 - [Questions fréquentes](#questions-fréquentes)
 
@@ -28,7 +29,9 @@ Le bouton **Déconnexion** dans le header met fin à la session sur cet appareil
 
 ## La page d'accueil
 
-La page d'accueil met en avant le **marché avec le plus gros volume** parmi les marchés ouverts, avec sa barre de répartition OUI/NON animée. En dessous, une grille présente les autres marchés ouverts. Un lien **Tout voir** mène à la liste complète.
+En haut de la page d'accueil, un **carousel de statistiques globales** présente l'activité du site sous forme de courbes : marchés ouverts, volume total, paris actifs, parieurs. Chaque statistique a sa propre couleur ; on navigue entre elles avec les flèches sur les côtés ou en glissant (souris ou tactile). Sur une courbe, déplacez le curseur pour voir sa valeur à une date passée — pas besoin de cliquer.
+
+En dessous, la page met en avant le **marché avec le plus gros volume** parmi les marchés ouverts, avec sa barre de répartition OUI/NON animée. Puis une grille présente les autres marchés ouverts. Un lien **Tout voir** mène à la liste complète.
 
 Si aucun marché n'est ouvert, la page l'indique. Si le serveur est injoignable, un message d'erreur s'affiche à la place d'une page cassée.
 
@@ -76,11 +79,12 @@ Un pari ne peut être placé que si le marché est **ouvert** et dans sa **péri
 
 ---
 
-## Le portefeuille
+## Le Profil
 
-La page **Portefeuille** affiche :
+Accessible via le lien **Profil** dans le header (adresse `/portefeuille`). La page affiche :
 
 - Votre **solde disponible**, en gros et en évidence, ainsi que l'**adresse de votre wallet on-chain**.
+- Vos **statistiques** : taux de réussite (sur vos paris déjà résolus), gains/pertes nets, exposition en cours (mise sur vos paris pas encore résolus, comptée à part pour ne pas fausser vos gains/pertes), une **courbe de gains/pertes cumulés** dans le temps (naviguez avec le curseur ou les flèches, comme sur l'accueil), et une **répartition par catégorie** (dans quelles catégories vous gagnez ou perdez le plus).
 - Votre **historique de paris**, avec deux onglets :
   - **En cours** : paris sur des marchés pas encore résolus.
   - **Passés** : paris sur des marchés résolus, avec le gain reçu (ou 0 € si le pari a perdu).
@@ -103,11 +107,19 @@ C'est pour cette raison que le "gain estimé" affiché avant de parier est une e
 
 ---
 
+## Signaler un problème
+
+Un souci de solde, un pari qui semble avoir été placé mais qui n'apparaît nulle part ? La page **Support** (lien dans le header) permet de créer un ticket : un sujet, un message, et vous l'envoyez. Si vous arrivez sur cette page depuis un message d'erreur qui mentionne un hash de transaction (ex. après un pari qui a échoué à s'enregistrer), le formulaire est **pré-rempli automatiquement** avec ce hash pour que l'admin puisse retrouver la transaction concernée.
+
+La même page liste vos tickets précédents avec leur statut (Ouvert / En cours / Résolu) et, une fois traités, la réponse laissée par l'admin.
+
+---
+
 ## Espace administrateur
 
 Réservé aux comptes avec le rôle **Admin**. Un lien **Admin** apparaît dans le header pour ces comptes, menant à `/admin`.
 
-Un compte Admin n'a **pas de portefeuille** et **ne peut pas parier** : il n'y a ni page Portefeuille, ni solde affiché, ni wallet on-chain provisionné pour ce rôle. C'est voulu — un admin peut créer et résoudre des marchés, il ne doit donc pas pouvoir parier dessus (conflit d'intérêt).
+Un compte Admin n'a **pas de portefeuille** et **ne peut pas parier** : il n'y a ni page Profil, ni solde affiché, ni wallet on-chain provisionné pour ce rôle. C'est voulu — un admin peut créer et résoudre des marchés, il ne doit donc pas pouvoir parier dessus (conflit d'intérêt).
 
 ### Marchés
 
@@ -128,7 +140,21 @@ sur la blockchain, il n'existe pas de mécanisme pour la reprendre.
 - Modifier le rôle d'un utilisateur existant.
 - Supprimer un utilisateur — impossible s'il a déjà parié, et impossible de se supprimer soi-même.
 
-Toutes les actions destructrices (conclure, supprimer) demandent une confirmation via une fenêtre du site avant d'être exécutées.
+### Tickets
+
+Liste tous les tickets envoyés par les utilisateurs via la page Support (sujet, message, auteur, et le hash de transaction lié le cas échéant). Pour chaque ticket, changez son statut (Ouvert / En cours / Résolu) et laissez une note qui sera visible par l'utilisateur, puis **Enregistrer**.
+
+### Diagnostics
+
+Un tableau de bord qui détecte automatiquement les cas où la base de données et la blockchain ne sont plus d'accord — typiquement après un souci réseau ou un redémarrage de la chaîne de test :
+
+- **Marchés désynchronisés** : un marché existe en base mais pas sur la blockchain (les paris dessus échoueraient). Bouton **Recréer on-chain**.
+- **Paris bloqués** : un marché est résolu mais un pari dessus n'a jamais reçu son gain calculé. Bouton **Resynchroniser le gain**.
+- **Soldes désynchronisés** : le solde affiché pour un utilisateur ne correspond plus à son solde réel sur la blockchain. Bouton **Resynchroniser le solde**.
+
+Si tout est cohérent, chaque section affiche simplement une coche verte. Chaque bouton de correction déclenche une vraie action (transaction blockchain ou relecture du solde réel) et demande une confirmation avant de s'exécuter, comme les autres actions sensibles de l'espace admin.
+
+Toutes les actions destructrices ou irréversibles (conclure, supprimer, resynchroniser) demandent une confirmation via une fenêtre du site avant d'être exécutées.
 
 ---
 
@@ -148,3 +174,6 @@ Non, ni vous ni un administrateur : une fois placé, un pari verrouille votre mi
 
 **Que veut dire "payout: 0 €" sur un pari passé ?**
 Le pari a perdu — vous n'avez pas récupéré votre mise. C'est différent d'un pari "en attente" (marché pas encore résolu), affiché sans montant.
+
+**J'ai un message d'erreur qui parle d'une transaction mais mon pari n'apparaît pas, que faire ?**
+Utilisez la page **Support** pour créer un ticket — le hash de transaction de l'erreur est repris automatiquement si vous y arrivez via le lien affiché dans le message d'erreur. Un admin pourra vérifier la transaction et resynchroniser votre compte si besoin.

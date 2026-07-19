@@ -38,6 +38,9 @@ export function Header() {
           {user && user.role !== "ADMIN" && (
             <NavLink href="/portefeuille" label="Profil" active={pathname.startsWith("/portefeuille")} />
           )}
+          {user && user.role !== "ADMIN" && (
+            <NavLink href="/support" label="Support" active={pathname.startsWith("/support")} />
+          )}
           {user?.role === "ADMIN" && (
             <NavLink href="/admin" label="Admin" active={pathname.startsWith("/admin")} />
           )}

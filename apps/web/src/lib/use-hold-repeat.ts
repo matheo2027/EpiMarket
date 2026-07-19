@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 /**
  * Press-and-hold repeat: fires `callback` once immediately, then again every
@@ -21,6 +21,8 @@ export function useHoldRepeat(callback: () => void, intervalMs = 130) {
     callback();
     intervalRef.current = setInterval(callback, intervalMs);
   }, [callback, intervalMs, stop]);
+
+  useEffect(() => stop, [stop]);
 
   return {
     onMouseDown: start,

@@ -20,27 +20,36 @@ Comme le token vit en `localStorage`, toute page qui a besoin de la session (por
 
 ```
 src/app/
-  page.tsx                     accueil : marché vedette + grille des marchés ouverts
+  page.tsx                     accueil : carousel de stats globales + marché vedette + grille des marchés ouverts
   marches/page.tsx             liste des marchés, filtres catégorie/statut
   marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
   connexion/, inscription/     auth
-  portefeuille/page.tsx        solde, adresse du wallet on-chain, historique des paris avec hash de transaction
+  portefeuille/page.tsx        page "Profil" : solde, wallet on-chain, stats (taux de réussite, P&L,
+                                répartition par catégorie, courbe de gains/pertes), historique des paris
+  support/page.tsx             signaler un problème (ticket) + suivi de ses propres tickets
   admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
     marches/                   CRUD marché + conclure un marché
     paris/                     liste de tous les paris (mise, camp, gain, hash de transaction)
     utilisateurs/              CRUD utilisateurs
+    tickets/                   traiter les tickets de support (statut, note)
+    diagnostics/               cohérence base ↔ blockchain, avec actions de resynchronisation
 ```
 
 ## Composants notables
 
-- `components/split-bar.tsx` — la barre de répartition OUI/NON (élément signature du design), réutilisée partout où une cote est affichée.
-- `components/price-chart.tsx` — graphe d'évolution du prix en SVG fait main (pas de librairie de charts).
+- `components/split-bar.tsx` — la barre de répartition OUI/NON, réutilisée partout où une cote est affichée.
+- `components/price-chart.tsx`, `components/pnl-chart.tsx`, `components/stat-chart.tsx` — graphes en SVG fait main (pas de librairie de charts), partagent le même langage visuel (aire dégradée, ligne avec glow). `stat-chart.tsx` et `pnl-chart.tsx` se pilotent à la souris (survol = déplacement dans le temps, sans clic) ou via les flèches en bas du graphe (clic maintenu = défilement continu, `lib/use-hold-repeat.ts`).
+- `components/stat-carousel.tsx` — carousel glissable (souris ou tactile) entre les 4 statistiques de l'accueil, chacune dans sa propre couleur (palette catégorielle validée avec le skill dataviz).
+- `components/animated-number.tsx` — anime un nombre affiché d'une valeur à l'autre (count-up), utilisé pour tous les gros chiffres (KPI, stats de profil).
+- `components/theme-toggle.tsx` + `lib/theme-context.tsx` — bascule clair/sombre, sans flash au chargement (script inline dans `layout.tsx` qui pose `data-theme` avant l'hydratation).
 - `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin.
-- `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives admin (conclure, supprimer, annuler).
+- `components/admin-stats.tsx` — bandeau de compteurs globaux en haut des pages admin (`GET /users/stats`).
+- `lib/bet-stats.ts` — calcule les statistiques de la page Profil (taux de réussite, P&L, répartition par catégorie, historique) à partir de la liste brute des paris de l'utilisateur.
+- `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives ou déclenchant une vraie transaction blockchain (conclure, supprimer, resynchroniser).
 
 ## Design
 
-Thème sombre, palette validée avec le skill dataviz (vert/rouge sémantiques pour OUI/NON). Typographie : Space Grotesk (titres), Inter (texte), JetBrains Mono (chiffres/cotes). Détails dans `src/app/globals.css`.
+Direction "Glass Terminal" : fond très sombre (ou clair en mode jour), cartes en verre dépoli (`backdrop-filter: blur`), accent bleu électrique, vert/rouge sémantiques pour OUI/NON, palette catégorielle (bleu/vert/rose/ambre) pour distinguer les statistiques entre elles — palette validée avec le skill dataviz (contraste et distinction daltonisme vérifiés, pas choisie à l'œil). Typographie : Geist (titres/texte), Geist Mono (chiffres/cotes). Bascule clair/sombre disponible dans le header. Détails dans `src/app/globals.css`.
 
 ## Commandes
 
