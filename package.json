@@ -8,7 +8,7 @@
     "predev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fix-wsl-docker-offload.ps1",
     "dev": "concurrently -n db,api,web -c blue,green,magenta \"npm:dev:db:wait\" \"npm:dev:api\" \"npm:dev:web\"",
     "dev:db": "docker compose up -d",
-    "dev:db:wait": "docker compose up -d && node -e \"setTimeout(()=>{}, 1000)\"",
+    "dev:db:wait": "docker compose up -d && docker compose restart postgres && node -e \"setTimeout(()=>{}, 1000)\"",
     "dev:api": "npm run dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",
     "db:down": "docker compose down"
