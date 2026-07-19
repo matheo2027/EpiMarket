@@ -63,20 +63,23 @@ usersRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const wallet = generateCustodialWallet();
+  const resolvedRole = role ?? "USER";
+  const wallet = resolvedRole === "ADMIN" ? undefined : generateCustodialWallet();
   try {
     const user = await prisma.user.create({
       data: {
         email: normalizedEmail,
         username: normalizedUsername,
         passwordHash,
-        role: role ?? "USER",
-        walletAddress: wallet.address,
-        encryptedPrivateKey: encryptPrivateKey(wallet.privateKey),
+        role: resolvedRole,
+        walletAddress: wallet?.address,
+        encryptedPrivateKey: wallet ? encryptPrivateKey(wallet.privateKey) : undefined,
       },
     });
 
-    await provisionNewWallet(user.id, wallet.address);
+    if (wallet) {
+      await provisionNewWallet(user.id, wallet.address);
+    }
     const freshUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
 
     res.status(201).json({ user: publicUser(freshUser) });

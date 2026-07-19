@@ -55,6 +55,10 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+  if (user.role === "ADMIN") {
+    res.status(403).json({ error: "Admins are not allowed to place bets" });
+    return;
+  }
   if (!user.walletAddress || !user.encryptedPrivateKey) {
     res.status(400).json({ error: "User has no custodial wallet" });
     return;

@@ -91,6 +91,14 @@ export default function PortefeuillePage() {
     );
   }
 
+  if (user.role === "ADMIN") {
+    return (
+      <div className="mx-auto max-w-md px-6 py-24 text-center">
+        <p className="text-muted">Les administrateurs n&apos;ont pas de portefeuille.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Portefeuille</h1>

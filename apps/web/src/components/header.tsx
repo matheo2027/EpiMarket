@@ -21,7 +21,7 @@ export function Header() {
           <Link href="/marches" className="transition-colors hover:text-paper">
             Marchés
           </Link>
-          {user && (
+          {user && user.role !== "ADMIN" && (
             <Link href="/portefeuille" className="transition-colors hover:text-paper">
               Portefeuille
             </Link>
@@ -36,9 +36,11 @@ export function Header() {
         <div className="flex items-center gap-3">
           {loading ? null : user ? (
             <>
-              <span className="hidden font-mono text-sm tabular-nums text-muted sm:inline">
-                {Number(user.walletBalance).toFixed(2)} €
-              </span>
+              {user.role !== "ADMIN" && (
+                <span className="hidden font-mono text-sm tabular-nums text-muted sm:inline">
+                  {Number(user.walletBalance).toFixed(2)} €
+                </span>
+              )}
               <button
                 onClick={logout}
                 className="rounded-full border border-line px-4 py-1.5 text-sm font-medium text-paper transition-colors hover:border-brand"

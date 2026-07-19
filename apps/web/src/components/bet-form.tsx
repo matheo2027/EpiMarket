@@ -52,6 +52,14 @@ export function BetForm({ market }: { market: Market }) {
     );
   }
 
+  if (user.role === "ADMIN") {
+    return (
+      <div className="rounded-2xl border border-line bg-surface p-5">
+        <p className="text-sm text-muted">Les administrateurs ne peuvent pas placer de paris.</p>
+      </div>
+    );
+  }
+
   const numericAmount = Number(amount);
   const estimatedPayout = estimatePayout(market, side, numericAmount);
 
