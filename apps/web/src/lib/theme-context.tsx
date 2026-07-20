@@ -26,6 +26,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const real = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see comment above: must run post-mount to avoid a hydration mismatch
     setThemeState(real);
   }, []);
 

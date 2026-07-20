@@ -74,8 +74,6 @@ export default function PortefeuillePage() {
 
   useEffect(() => {
     if (!token) return;
-    setAllBets(null);
-    setError(null);
     apiFetch<{ bets: Bet[] }>("/bets", { token })
       .then((data) => setAllBets(data.bets))
       .catch((err) => setError(errorMessage(err)));
