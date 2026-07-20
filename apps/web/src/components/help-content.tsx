@@ -43,7 +43,7 @@ export function UserGuideContent() {
           Choisissez votre camp (ou votre option), un montant, et un <strong>gain estimé</strong>{" "}
           s&apos;affiche avant de valider. Ce n&apos;est pas garanti : d&apos;autres personnes peuvent encore parier avant la
           clôture. Le pari n&apos;est possible que sur un marché ouvert, dans sa période active, et avec un
-          solde suffisant.
+          solde suffisant. Vous pouvez le <strong>retirer</strong> tant que le marché n&apos;est pas résolu (remboursement intégral, depuis votre Profil).
         </p>
       </Section>
 
@@ -52,7 +52,8 @@ export function UserGuideContent() {
           Solde, adresse du wallet on-chain, et des statistiques : taux de réussite, gains/pertes nets,
           exposition en cours (mise sur les paris pas encore résolus, comptée à part), une courbe de
           gains/pertes cumulés, et une répartition par catégorie. En dessous, l&apos;historique des paris
-          (en cours / passés), chacun avec le hash de sa transaction on-chain.
+          (en cours / passés), chacun avec le hash de sa transaction on-chain. Un pari en cours a un
+          bouton <strong>Retirer</strong> — annule le pari et rembourse la mise, sans gain ni perte.
         </p>
       </Section>
 

@@ -545,9 +545,14 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
     const bets = await prisma.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
     const readContract = getReadOnlyContract();
     const payouts = await Promise.all(
-      bets.map(async (_, i) => {
+      bets.map(async (bet) => {
+        // Already settled by an earlier withdrawal — skip, don't overwrite the
+        // refund with the contract's untouched (0) payout for that bet.
+        if (bet.withdrawnAt) return null;
         const result =
-          existing.type === "MULTI" ? await readContract.getMultiBet(existing.id, i) : await readContract.getBet(existing.id, i);
+          existing.type === "MULTI"
+            ? await readContract.getMultiBet(existing.id, bet.chainIndex)
+            : await readContract.getBet(existing.id, bet.chainIndex);
         return fromChainAmount(result[3]);
       }),
     );
@@ -563,6 +568,7 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
 
     const market = await prisma.$transaction(async (dbTx) => {
       for (let i = 0; i < bets.length; i++) {
+        if (payouts[i] === null) continue;
         await dbTx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
       }
       for (const [userId, walletBalance] of balances) {

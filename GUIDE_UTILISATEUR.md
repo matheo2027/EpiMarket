@@ -85,6 +85,8 @@ Votre solde est immédiatement débité du montant misé, et la cote du marché 
 
 Un pari ne peut être placé que si le marché est **ouvert** et dans sa **période active** (entre sa date de début et sa date de clôture). Si votre solde est insuffisant, le pari est refusé.
 
+Changé d'avis ? Tant que le marché n'est pas résolu, vous pouvez **retirer** un pari en cours depuis votre Profil — voir la section suivante.
+
 ---
 
 ## Le Profil
@@ -94,8 +96,11 @@ Accessible via le lien **Profil** dans le header (adresse `/portefeuille`). La p
 - Votre **solde disponible**, en gros et en évidence, ainsi que l'**adresse de votre wallet on-chain**.
 - Vos **statistiques** : taux de réussite (sur vos paris déjà résolus), gains/pertes nets, exposition en cours (mise sur vos paris pas encore résolus, comptée à part pour ne pas fausser vos gains/pertes), une **courbe de gains/pertes cumulés** dans le temps (naviguez avec le curseur ou les flèches, comme sur l'accueil), et une **répartition par catégorie** (dans quelles catégories vous gagnez ou perdez le plus).
 - Votre **historique de paris**, avec deux onglets :
-  - **En cours** : paris sur des marchés pas encore résolus.
-  - **Passés** : paris sur des marchés résolus, avec le gain reçu (ou 0 € si le pari a perdu).
+  - **En cours** : paris sur des marchés pas encore résolus et pas retirés. Chacun a un bouton
+    **Retirer** — annule le pari et vous rembourse exactement votre mise (ni gain, ni perte : voir
+    "Puis-je annuler un pari ?" dans la FAQ).
+  - **Passés** : paris sur des marchés résolus (avec le gain reçu, ou 0 € si le pari a perdu) ou que
+    vous avez retirés (marqués **Retiré**, avec le montant remboursé).
 
 Chaque pari affiche aussi le **hash de sa transaction on-chain** : la preuve qu'il correspond à une
 vraie transaction sur la blockchain, pas juste une ligne dans une base de données. Chaque ligne de
@@ -190,7 +195,7 @@ Un marché démarre neutre : sans pari, il n'y a pas encore d'information pour p
 Le marché a probablement été résolu entre le moment où vous avez ouvert la page et celui où vous avez validé le pari (ou votre solde est insuffisant). Rechargez la page pour voir son état actuel.
 
 **Puis-je annuler un pari ?**
-Non, ni vous ni un administrateur : une fois placé, un pari verrouille votre mise sur la blockchain et il n'existe aucun mécanisme pour l'annuler. Vérifiez bien votre choix (camp et montant) avant de valider.
+Oui, tant que le marché n'est pas résolu : depuis votre Profil, un pari "En cours" a un bouton **Retirer** qui vous rembourse exactement votre mise (ni gain, ni perte). Une fois le marché résolu, ce n'est plus possible, ni pour vous ni pour un administrateur.
 
 **Que veut dire "payout: 0 €" sur un pari passé ?**
 Le pari a perdu — vous n'avez pas récupéré votre mise. C'est différent d'un pari "en attente" (marché pas encore résolu), affiché sans montant.

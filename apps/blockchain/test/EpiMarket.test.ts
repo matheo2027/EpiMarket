@@ -112,7 +112,7 @@ describe("EpiMarket", () => {
 
       await expect(epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 300n))
         .to.emit(epiMarket, "BetPlaced")
-        .withArgs("market-1", alice.address, Outcome.YES, 300n);
+        .withArgs("market-1", alice.address, Outcome.YES, 300n, 0n);
 
       expect(await epiMarket.balanceOf(alice.address)).to.equal(700n);
       expect(await epiMarket.balanceOf(await epiMarket.getAddress())).to.equal(300n);
@@ -269,6 +269,72 @@ describe("EpiMarket", () => {
     });
   });
 
+  describe("withdrawBet", () => {
+    it("refunds the stake in full and removes it from the pool", async () => {
+      const { epiMarket, alice } = await loadFixture(deployWithMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 300n);
+
+      await expect(epiMarket.connect(alice).withdrawBet("market-1", 0))
+        .to.emit(epiMarket, "BetWithdrawn")
+        .withArgs("market-1", alice.address, 300n);
+
+      expect(await epiMarket.balanceOf(alice.address)).to.equal(1000n);
+      expect(await epiMarket.balanceOf(await epiMarket.getAddress())).to.equal(0n);
+
+      const market = await epiMarket.markets("market-1");
+      expect(market.yesPool).to.equal(SEED_LIQUIDITY);
+      expect(market.totalVolume).to.equal(0n);
+
+      const [, , , , withdrawn] = await epiMarket.getBet("market-1", 0);
+      expect(withdrawn).to.equal(true);
+    });
+
+    it("rejects withdrawing someone else's bet", async () => {
+      const { epiMarket, alice, bob } = await loadFixture(deployWithMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 300n);
+      await expect(epiMarket.connect(bob).withdrawBet("market-1", 0)).to.be.revertedWith("Not your bet");
+    });
+
+    it("rejects withdrawing the same bet twice", async () => {
+      const { epiMarket, alice } = await loadFixture(deployWithMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 300n);
+      await epiMarket.connect(alice).withdrawBet("market-1", 0);
+      await expect(epiMarket.connect(alice).withdrawBet("market-1", 0)).to.be.revertedWith("Bet already withdrawn");
+    });
+
+    it("rejects withdrawing once the market is resolved", async () => {
+      const { epiMarket, alice } = await loadFixture(deployWithMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 300n);
+      await epiMarket.resolveMarket("market-1", Outcome.YES);
+      await expect(epiMarket.connect(alice).withdrawBet("market-1", 0)).to.be.revertedWith(
+        "Market is not open for betting",
+      );
+    });
+
+    it("excludes a withdrawn bet from the resolution payout", async () => {
+      const { epiMarket, alice, bob, carol } = await loadFixture(deployWithMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.mint(bob.address, 1000n);
+      await epiMarket.mint(carol.address, 1000n);
+
+      await epiMarket.connect(alice).placeBet("market-1", Outcome.YES, 100n);
+      await epiMarket.connect(alice).withdrawBet("market-1", 0);
+      await epiMarket.connect(bob).placeBet("market-1", Outcome.YES, 200n);
+      await epiMarket.connect(carol).placeBet("market-1", Outcome.NO, 100n);
+
+      await epiMarket.resolveMarket("market-1", Outcome.YES);
+
+      // Bob is the only real backer of YES left, so he gets the whole real pot.
+      expect(await epiMarket.balanceOf(bob.address)).to.equal(800n + 300n);
+      expect(await epiMarket.balanceOf(alice.address)).to.equal(1000n);
+      expect(await epiMarket.balanceOf(await epiMarket.getAddress())).to.equal(0n);
+    });
+  });
+
   describe("createMultiMarket", () => {
     it("seeds every option pool with virtual liquidity", async () => {
       const { epiMarket } = await loadFixture(deployFixture);
@@ -311,7 +377,7 @@ describe("EpiMarket", () => {
 
       await expect(epiMarket.connect(alice).placeMultiBet("multi-1", 2, 300n))
         .to.emit(epiMarket, "MultiBetPlaced")
-        .withArgs("multi-1", alice.address, 2, 300n);
+        .withArgs("multi-1", alice.address, 2, 300n, 0n);
 
       expect(await epiMarket.balanceOf(alice.address)).to.equal(700n);
 
@@ -393,6 +459,50 @@ describe("EpiMarket", () => {
       const { epiMarket } = await loadFixture(deployWithMultiMarketFixture);
       await epiMarket.resolveMultiMarket("multi-1", 0);
       await expect(epiMarket.resolveMultiMarket("multi-1", 0)).to.be.revertedWith("Market is already resolved");
+    });
+  });
+
+  describe("withdrawMultiBet", () => {
+    async function deployWithMultiMarketFixture() {
+      const base = await deployFixture();
+      await base.epiMarket.createMultiMarket("multi-1", 4);
+      return base;
+    }
+
+    it("refunds the stake in full and removes it from the option pool", async () => {
+      const { epiMarket, alice } = await loadFixture(deployWithMultiMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeMultiBet("multi-1", 2, 300n);
+
+      await expect(epiMarket.connect(alice).withdrawMultiBet("multi-1", 0))
+        .to.emit(epiMarket, "MultiBetWithdrawn")
+        .withArgs("multi-1", alice.address, 300n);
+
+      expect(await epiMarket.balanceOf(alice.address)).to.equal(1000n);
+
+      const [pools, totalVolume] = await epiMarket.getMultiMarket("multi-1");
+      expect(pools[2]).to.equal(SEED_LIQUIDITY);
+      expect(totalVolume).to.equal(0n);
+
+      const [, , , , withdrawn] = await epiMarket.getMultiBet("multi-1", 0);
+      expect(withdrawn).to.equal(true);
+    });
+
+    it("rejects withdrawing someone else's bet", async () => {
+      const { epiMarket, alice, bob } = await loadFixture(deployWithMultiMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeMultiBet("multi-1", 1, 100n);
+      await expect(epiMarket.connect(bob).withdrawMultiBet("multi-1", 0)).to.be.revertedWith("Not your bet");
+    });
+
+    it("rejects withdrawing once the market is resolved", async () => {
+      const { epiMarket, alice } = await loadFixture(deployWithMultiMarketFixture);
+      await epiMarket.mint(alice.address, 1000n);
+      await epiMarket.connect(alice).placeMultiBet("multi-1", 1, 100n);
+      await epiMarket.resolveMultiMarket("multi-1", 1);
+      await expect(epiMarket.connect(alice).withdrawMultiBet("multi-1", 0)).to.be.revertedWith(
+        "Market is not open for betting",
+      );
     });
   });
 

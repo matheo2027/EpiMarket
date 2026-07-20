@@ -65,6 +65,7 @@ export type Bet = {
   payout: string | null;
   txHash: string | null;
   createdAt: string;
+  withdrawnAt: string | null;
   userId: string;
   marketId: string;
   optionId: string | null;

@@ -31,6 +31,8 @@ src/app/
   reinitialiser-mot-de-passe/  de reset est affiché directement au lieu d'être envoyé par email
   portefeuille/page.tsx        page "Profil" : solde, wallet on-chain, stats (taux de réussite, P&L,
                                 répartition par catégorie, courbe de gains/pertes), historique des paris
+                                (avec bouton "Retirer" sur un pari en cours — remboursement intégral
+                                avant résolution, pas une vente au prix du marché)
   support/page.tsx             signaler un problème (ticket) + suivi de ses propres tickets
   admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
     marches/                   CRUD marché + conclure un marché

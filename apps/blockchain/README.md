@@ -28,7 +28,15 @@ Fonctions principales :
   intégral si personne n'a parié sur le camp gagnant) et transfère les gains directement aux gagnants.
   Le payout de chaque pari est aussi stocké on-chain (`getBet` le renvoie), pour que l'API puisse le
   recopier telle quelle plutôt que de le recalculer.
-- Events `Transfer`, `BetPlaced`, `MarketResolved` pour la traçabilité.
+- `withdrawBet(marketId, index)` — n'importe quel parieur peut annuler **son propre** pari tant que le
+  marché est encore ouvert : remboursement intégral de la mise (ni gain, ni perte), pool et
+  `totalVolume` décrémentés, pari marqué `withdrawn`. Ce n'est pas une vente au prix du marché — un pool
+  pari-mutuel n'a personne en face pour racheter une position avant résolution ; payer la valeur "si
+  résolu maintenant" piocherait dans l'argent des autres parieurs encore en jeu et casserait la
+  solvabilité du contrat (vérifié par le calcul avant d'implémenter). `resolveMarket` ignore les paris
+  `withdrawn` dans son calcul de règlement.
+- Events `Transfer`, `BetPlaced` (avec l'index on-chain du pari, pour cibler un retrait sans ambiguïté),
+  `BetWithdrawn`, `MarketResolved` pour la traçabilité.
 
 ### Marchés à options multiples
 
@@ -49,6 +57,7 @@ sans toucher aux fonctions ci-dessus : un marché OUI/NON reste géré par `mark
   un tableau dynamique (`uint256[] pools`) dans un struct.
 - `getMultiBetCount`/`getMultiBet` — équivalents de `getBetCount`/`getBet` pour l'historique des paris
   à options multiples.
+- `withdrawMultiBet(marketId, index)` — équivalent de `withdrawBet` pour un marché à options multiples.
 
 C'est une généralisation directe du modèle binaire (courses hippiques à N chevaux plutôt qu'à 2), pas
 une redirection sur des OpenZeppelin/librairies de marché prédictif : le choix a été fait pour rester
@@ -61,9 +70,9 @@ mécanisme de Polymarket (N mini-marchés OUI/NON indépendants par option), net
 npx hardhat test
 ```
 
-34 tests couvrant : mint, transferts/allowances ERC-20, marchés OUI/NON (création, pari, résolution —
-répartition proportionnelle, reliquat d'arrondi, remboursement si personne n'a gagné, appel non-owner),
-et l'équivalent pour les marchés à options multiples.
+42 tests couvrant : mint, transferts/allowances ERC-20, marchés OUI/NON (création, pari, retrait avant
+résolution, résolution — répartition proportionnelle, reliquat d'arrondi, remboursement si personne n'a
+gagné, appel non-owner), et l'équivalent pour les marchés à options multiples.
 
 ## Déploiement
 
