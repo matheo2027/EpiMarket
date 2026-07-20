@@ -2,12 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { CategoryBadge } from "@/components/category-badge";
+import { FavoriteButton } from "@/components/favorite-button";
 import { SplitBar } from "@/components/split-bar";
 import { OptionsBar } from "@/components/options-bar";
 import { PriceChart } from "@/components/price-chart";
 import { OptionsPriceChart } from "@/components/options-price-chart";
 import { BetForm } from "@/components/bet-form";
-import type { Market, MarketOption, OptionPricePoint, PricePoint } from "@/lib/types";
+import { MarketComments } from "@/components/market-comments";
+import type { Comment, Market, MarketOption, OptionPricePoint, PricePoint } from "@/lib/types";
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("fr-FR", {
@@ -48,12 +50,17 @@ async function getPriceHistory(id: string, type: Market["type"]): Promise<PriceH
   return { kind: "binary", pricePoints: data.pricePoints };
 }
 
+async function getComments(id: string): Promise<Comment[]> {
+  const data = await apiFetch<{ comments: Comment[] }>(`/markets/${id}/comments`);
+  return data.comments;
+}
+
 export default async function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const market = await getMarket(id);
   if (!market) notFound();
 
-  const priceHistory = await getPriceHistory(id, market.type);
+  const [priceHistory, comments] = await Promise.all([getPriceHistory(id, market.type), getComments(id)]);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -66,6 +73,7 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
           <div>
             <div className="flex items-center gap-3">
               <CategoryBadge category={market.category} />
+              <FavoriteButton marketId={market.id} />
               {market.status === "RESOLVED" && market.type === "BINARY" && (
                 <span className="font-mono text-xs uppercase tracking-wide text-muted">
                   Résolu : {market.resolvedOutcome === "YES" ? "OUI" : "NON"}
@@ -128,6 +136,8 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
               <p className="mt-1 text-paper">{market.status === "OPEN" ? "Ouvert" : "Résolu"}</p>
             </div>
           </div>
+
+          <MarketComments marketId={market.id} initialComments={comments} />
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">

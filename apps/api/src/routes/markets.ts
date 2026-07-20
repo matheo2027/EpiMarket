@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { MarketCategory, MarketStatus, MarketType, type Market, type MarketOption } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
 import { computeOptionPrices, computePrices } from "../pricing.js";
 import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
 import { runAsOwner } from "../blockchain/provider.js";
@@ -30,9 +30,15 @@ function validateOptionLabels(options: unknown): string[] | null {
   return labels;
 }
 
+const SORTS = {
+  recent: { createdAt: "desc" as const },
+  volume: { totalVolume: "desc" as const },
+  closing: { endDate: "asc" as const },
+};
+
 marketsRouter.get("/", async (req, res) => {
-  const { status, category } = req.query;
-  const where: { status?: MarketStatus; category?: MarketCategory } = {};
+  const { status, category, search, sort } = req.query;
+  const where: { status?: MarketStatus; category?: MarketCategory; title?: { contains: string; mode: "insensitive" } } = {};
 
   if (typeof status === "string") {
     if (!STATUSES.includes(status as MarketStatus)) {
@@ -48,8 +54,16 @@ marketsRouter.get("/", async (req, res) => {
     }
     where.category = category as MarketCategory;
   }
+  if (typeof search === "string" && search.trim()) {
+    where.title = { contains: search.trim(), mode: "insensitive" };
+  }
+  if (typeof sort === "string" && !(sort in SORTS)) {
+    res.status(400).json({ error: `sort must be one of ${Object.keys(SORTS).join(", ")}` });
+    return;
+  }
+  const orderBy = SORTS[(typeof sort === "string" ? sort : "recent") as keyof typeof SORTS];
 
-  const markets = await prisma.market.findMany({ where, include: optionsOrder, orderBy: { createdAt: "desc" } });
+  const markets = await prisma.market.findMany({ where, include: optionsOrder, orderBy });
   res.json({ markets: markets.map(serializeMarket) });
 });
 
@@ -151,6 +165,77 @@ marketsRouter.get("/:id/price-history", async (req, res) => {
     orderBy: { timestamp: "asc" },
   });
   res.json({ pricePoints });
+});
+
+marketsRouter.post("/:id/favorite", requireAuth, async (req, res) => {
+  const market = await prisma.market.findUnique({ where: { id: req.params.id } });
+  if (!market) {
+    res.status(404).json({ error: "Market not found" });
+    return;
+  }
+
+  await prisma.favorite.upsert({
+    where: { userId_marketId: { userId: req.user!.userId, marketId: market.id } },
+    create: { userId: req.user!.userId, marketId: market.id },
+    update: {},
+  });
+  res.status(204).send();
+});
+
+marketsRouter.delete("/:id/favorite", requireAuth, async (req, res) => {
+  await prisma.favorite.deleteMany({ where: { userId: req.user!.userId, marketId: req.params.id } });
+  res.status(204).send();
+});
+
+const MAX_COMMENT_LENGTH = 1000;
+
+marketsRouter.get("/:id/comments", async (req, res) => {
+  const comments = await prisma.comment.findMany({
+    where: { marketId: req.params.id },
+    include: { user: { select: { id: true, username: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({ comments });
+});
+
+marketsRouter.post("/:id/comments", requireAuth, async (req, res) => {
+  const market = await prisma.market.findUnique({ where: { id: req.params.id } });
+  if (!market) {
+    res.status(404).json({ error: "Market not found" });
+    return;
+  }
+
+  const { content } = req.body ?? {};
+  if (typeof content !== "string" || content.trim().length === 0) {
+    res.status(400).json({ error: "content is required" });
+    return;
+  }
+  if (content.trim().length > MAX_COMMENT_LENGTH) {
+    res.status(400).json({ error: `content must be at most ${MAX_COMMENT_LENGTH} characters` });
+    return;
+  }
+
+  const comment = await prisma.comment.create({
+    data: { content: content.trim(), userId: req.user!.userId, marketId: market.id },
+    include: { user: { select: { id: true, username: true } } },
+  });
+  res.status(201).json({ comment });
+});
+
+marketsRouter.delete("/:id/comments/:commentId", requireAuth, async (req, res) => {
+  const comment = await prisma.comment.findUnique({ where: { id: req.params.commentId } });
+  if (!comment || comment.marketId !== req.params.id) {
+    res.status(404).json({ error: "Comment not found" });
+    return;
+  }
+
+  if (comment.userId !== req.user!.userId && (await currentUserRole(req.user!.userId)) !== "ADMIN") {
+    res.status(403).json({ error: "Not allowed to delete this comment" });
+    return;
+  }
+
+  await prisma.comment.delete({ where: { id: comment.id } });
+  res.status(204).send();
 });
 
 marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {

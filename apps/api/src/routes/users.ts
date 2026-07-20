@@ -38,6 +38,53 @@ usersRouter.get("/stats", requireAuth, requireAdmin, async (_req, res) => {
   });
 });
 
+usersRouter.get("/me/favorites", requireAuth, async (req, res) => {
+  const favorites = await prisma.favorite.findMany({
+    where: { userId: req.user!.userId },
+    select: { marketId: true },
+  });
+  res.json({ marketIds: favorites.map((f) => f.marketId) });
+});
+
+usersRouter.get("/leaderboard", async (_req, res) => {
+  const resolvedBets = await prisma.bet.groupBy({
+    by: ["userId"],
+    where: { market: { status: "RESOLVED" } },
+    _sum: { amount: true, payout: true },
+    _count: true,
+  });
+
+  const wins = await prisma.bet.groupBy({
+    by: ["userId"],
+    where: { market: { status: "RESOLVED" }, payout: { gt: 0 } },
+    _count: true,
+  });
+  const winsByUser = new Map(wins.map((w) => [w.userId, w._count]));
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: resolvedBets.map((b) => b.userId) } },
+    select: { id: true, username: true },
+  });
+  const usernameById = new Map(users.map((u) => [u.id, u.username]));
+
+  const leaderboard = resolvedBets
+    .map((b) => {
+      const totalWagered = Number(b._sum.amount ?? 0);
+      const totalWon = Number(b._sum.payout ?? 0);
+      return {
+        userId: b.userId,
+        username: usernameById.get(b.userId) ?? "—",
+        netPnl: totalWon - totalWagered,
+        winRate: b._count > 0 ? (winsByUser.get(b.userId) ?? 0) / b._count : 0,
+        resolvedCount: b._count,
+      };
+    })
+    .sort((a, b) => b.netPnl - a.netPnl)
+    .slice(0, 50);
+
+  res.json({ leaderboard });
+});
+
 usersRouter.get("/:id", requireAuth, async (req, res) => {
   if (req.user!.userId !== req.params.id && (await currentUserRole(req.user!.userId)) !== "ADMIN") {
     res.status(403).json({ error: "Not allowed to view this user" });

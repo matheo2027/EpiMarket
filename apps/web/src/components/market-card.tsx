@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CategoryBadge } from "./category-badge";
+import { FavoriteButton } from "./favorite-button";
 import { SplitBar } from "./split-bar";
 import { OptionsBar } from "./options-bar";
 import type { Market } from "@/lib/types";
@@ -28,7 +29,10 @@ export function MarketCard({ market }: { market: Market }) {
     >
       <div className="flex items-center justify-between">
         <CategoryBadge category={market.category} />
-        <span className="font-mono text-xs text-muted">{statusLabel(market)}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-muted">{statusLabel(market)}</span>
+          <FavoriteButton marketId={market.id} />
+        </div>
       </div>
       <h3 className="font-display text-lg font-medium leading-snug text-paper">{market.title}</h3>
       {market.type === "MULTI" ? (

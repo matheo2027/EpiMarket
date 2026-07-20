@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { FavoritesProvider } from "@/lib/favorites-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { ConfirmProvider } from "@/lib/confirm-context";
 import { Header } from "@/components/header";
@@ -42,12 +43,14 @@ export default function RootLayout({
         </Script>
         <div className="bg-orbs" aria-hidden="true" />
         <AuthProvider>
-          <ThemeProvider>
-            <ConfirmProvider>
-              <Header />
-              <main className="flex-1">{children}</main>
-            </ConfirmProvider>
-          </ThemeProvider>
+          <FavoritesProvider>
+            <ThemeProvider>
+              <ConfirmProvider>
+                <Header />
+                <main className="flex-1">{children}</main>
+              </ConfirmProvider>
+            </ThemeProvider>
+          </FavoritesProvider>
         </AuthProvider>
       </body>
     </html>

@@ -20,6 +20,29 @@ npx prisma studio                      # interface graphique pour explorer les d
 npm run db:seed                        # crée un compte admin de test (admin@epitech.eu / admin1234)
 ```
 
+## Tests
+
+```bash
+npm test          # migre la base de test puis lance la suite une fois
+npm run test:watch
+```
+
+Tests d'intégration (Vitest + Supertest) : ils tapent l'app Express réelle (`src/app.ts`, importée sans
+`app.listen` — pas de port à libérer) et le vrai contrat sur le nœud Hardhat déjà lancé en dev, sans
+mocker la blockchain. Base dédiée `polymarket_test` (même conteneur Postgres, `apps/api/.env.test`,
+gitignored comme `.env`) : `npm test` applique d'abord les migrations dessus (`pretest`), donc jamais de
+risque de toucher aux données de dev. Chaque fichier réinitialise les tables avant chaque test
+(`test/helpers.ts#resetDb`) ; les fichiers tournent en séquence, pas en parallèle
+(`fileParallelism: false` dans `vitest.config.ts`) car les transactions on-chain (création de compte,
+résolution de marché) passent par le même compte owner/funder — les paralléliser ferait collisionner le
+nonce entre workers.
+
+Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`), marchés
+(création admin-only, recherche/tri, cycle complet pari→résolution→payout en BINARY et en MULTI, fenêtre
+de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions de lecture), favoris,
+commentaires, classement. Pas exhaustif (pas de couverture tickets/diagnostics/admin utilisateurs pour
+l'instant) — un premier passage, à étendre au fil de l'eau.
+
 ## Schéma
 
 ### `User`
@@ -175,6 +198,11 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
 - `GET /users/:id` — soi-même ou admin
 - `GET /users/stats` — (admin) compteurs globaux (utilisateurs, marchés ouverts/résolus, paris, volume) pour le bandeau en haut des pages admin.
+- `GET /users/leaderboard` — public. Top 50 utilisateurs classés par gain net réalisé (`payout - amount`
+  sur leurs paris résolus uniquement, même définition que les stats de la page Profil), agrégé
+  directement en base (`prisma.bet.groupBy`) plutôt que de recalculer côté client. Les utilisateurs sans
+  aucun pari résolu n'apparaissent pas. Doit rester déclarée avant `GET /users/:id` (sinon Express
+  interprète `leaderboard` comme un `:id`).
 - `POST /tickets` — créer un ticket de support (utilisateur connecté), avec `betId`/`marketId`/`txHash` optionnels pour le lier à un pari précis.
 - `GET /tickets` — les tickets de l'utilisateur connecté ; `GET /tickets?all=true` (admin) — tous les tickets, avec l'auteur.
 - `GET /tickets/:id` — un ticket (propriétaire ou admin).
