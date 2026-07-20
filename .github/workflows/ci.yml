@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  blockchain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Compile contracts
+        working-directory: apps/blockchain
+        run: npx hardhat compile
+      - name: Run contract tests
+        working-directory: apps/blockchain
+        run: npx hardhat test
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        working-directory: apps/web
+        run: npx tsc --noEmit
+      - name: Lint
+        working-directory: apps/web
+        run: npx eslint src --max-warnings=0
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: polymarket
+          POSTGRES_PASSWORD: polymarket
+          POSTGRES_DB: polymarket_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/api
+        run: npx tsc --noEmit
+
+      # Same sequence as apps/blockchain/docker-entrypoint.sh (used for local
+      # dev): start the node, wait for the RPC port, deploy the contract so
+      # the API can read apps/api/src/blockchain/deployment.json.
+      - name: Start Hardhat node
+        working-directory: apps/blockchain
+        run: |
+          npx hardhat node --hostname 0.0.0.0 &
+          node -e "
+          const net = require('node:net');
+          const tryConnect = () => {
+            const socket = net.connect(8545, '127.0.0.1', () => { socket.end(); process.exit(0); });
+            socket.on('error', () => setTimeout(tryConnect, 500));
+          };
+          tryConnect();
+          "
+
+      - name: Deploy contract
+        working-directory: apps/blockchain
+        run: npx hardhat run scripts/deploy.ts --network localhost
+
+      # Values below are the same well-known local/dev-only ones documented in
+      # apps/blockchain/README.md (deterministic Hardhat test account) and
+      # apps/api/README.md — never real secrets, safe to inline in the workflow.
+      - name: Write API test env
+        working-directory: apps/api
+        run: |
+          cat > .env.test <<'EOF'
+          DATABASE_URL="postgresql://polymarket:polymarket@localhost:5432/polymarket_test"
+          PORT=4001
+          JWT_SECRET="ci-test-secret-not-sensitive"
+          FRONTEND_URL="http://localhost:3000"
+          WALLET_ENCRYPTION_KEY="1564ba82206a5c5f16d29c9547acdd191c845633d195cfdccee0d9ebbbf2eaea"
+          HARDHAT_RPC_URL="http://127.0.0.1:8545"
+          HARDHAT_FUNDER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+          EOF
+
+      - name: Run API tests
+        working-directory: apps/api
+        run: npm test
