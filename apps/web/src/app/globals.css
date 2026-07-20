@@ -9,6 +9,7 @@
   --ink: #0b0d12;
   --surface: rgba(255, 255, 255, 0.045);
   --surface-raised: rgba(255, 255, 255, 0.085);
+  --header-surface: rgba(14, 17, 23, 0.82);
   --line: rgba(255, 255, 255, 0.1);
   --paper: #f2f4f8;
   --muted: #8b93a7;
@@ -33,6 +34,7 @@
   --ink: #eef1f8;
   --surface: #ffffff;
   --surface-raised: #f3f5fb;
+  --header-surface: var(--surface);
   --line: rgba(15, 23, 42, 0.1);
   --paper: #10141c;
   --muted: #5b6478;
@@ -56,6 +58,7 @@
   --color-ink: var(--ink);
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
+  --color-header-surface: var(--header-surface);
   --color-line: var(--line);
   --color-paper: var(--paper);
   --color-muted: var(--muted);
@@ -97,7 +100,8 @@ body {
    mode. This is additive to the Tailwind-generated utility, not a
    replacement, so no per-component edits are needed. */
 .bg-surface,
-.bg-surface-raised {
+.bg-surface-raised,
+.bg-header-surface {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }

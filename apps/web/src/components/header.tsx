@@ -27,7 +27,7 @@ export function Header() {
 
   return (
     <header className="sticky top-4 z-40 mt-4 px-3 sm:px-6">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-full border border-line bg-surface py-2 pl-4 pr-2 shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-full border border-line bg-header-surface py-2 pl-4 pr-2 shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-display text-base font-semibold tracking-tight">
           {/* eslint-disable-next-line @next/next/no-img-element -- small fixed-size static mark */}
           <img src="/epimarket-mark.png" alt="" style={{ height: "26px", width: "26px" }} />
