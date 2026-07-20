@@ -20,6 +20,29 @@ npx prisma studio                      # interface graphique pour explorer les d
 npm run db:seed                        # crée un compte admin de test (admin@epitech.eu / admin1234)
 ```
 
+## Tests
+
+```bash
+npm test          # migre la base de test puis lance la suite une fois
+npm run test:watch
+```
+
+Tests d'intégration (Vitest + Supertest) : ils tapent l'app Express réelle (`src/app.ts`, importée sans
+`app.listen` — pas de port à libérer) et le vrai contrat sur le nœud Hardhat déjà lancé en dev, sans
+mocker la blockchain. Base dédiée `polymarket_test` (même conteneur Postgres, `apps/api/.env.test`,
+gitignored comme `.env`) : `npm test` applique d'abord les migrations dessus (`pretest`), donc jamais de
+risque de toucher aux données de dev. Chaque fichier réinitialise les tables avant chaque test
+(`test/helpers.ts#resetDb`) ; les fichiers tournent en séquence, pas en parallèle
+(`fileParallelism: false` dans `vitest.config.ts`) car les transactions on-chain (création de compte,
+résolution de marché) passent par le même compte owner/funder — les paralléliser ferait collisionner le
+nonce entre workers.
+
+Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`), marchés
+(création admin-only, recherche/tri, cycle complet pari→résolution→payout en BINARY et en MULTI, fenêtre
+de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions de lecture), favoris,
+commentaires, classement. Pas exhaustif (pas de couverture tickets/diagnostics/admin utilisateurs pour
+l'instant) — un premier passage, à étendre au fil de l'eau.
+
 ## Schéma
 
 ### `User`
