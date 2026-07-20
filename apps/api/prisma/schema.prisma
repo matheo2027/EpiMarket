@@ -55,8 +55,10 @@ model User {
   walletAddress       String? @unique
   encryptedPrivateKey String?
 
-  bets    Bet[]
-  tickets Ticket[]
+  bets      Bet[]
+  tickets   Ticket[]
+  favorites Favorite[]
+  comments  Comment[]
 }
 
 model Market {
@@ -86,6 +88,8 @@ model Market {
   pricePoints PricePoint[]
   options     MarketOption[]
   tickets     Ticket[]
+  favorites   Favorite[]
+  comments    Comment[]
 }
 
 model MarketOption {
@@ -172,4 +176,32 @@ model Ticket {
 
   @@index([userId])
   @@index([status])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketId])
+  @@index([marketId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
 }

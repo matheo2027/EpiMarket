@@ -144,6 +144,15 @@ export type OptionPricePoint = {
   optionId: string;
 };
 
+export type Comment = {
+  id: string;
+  content: string;
+  createdAt: string;
+  userId: string;
+  marketId: string;
+  user: Pick<User, "id" | "username">;
+};
+
 export type LeaderboardEntry = {
   userId: string;
   username: string;

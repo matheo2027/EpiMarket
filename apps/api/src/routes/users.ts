@@ -38,6 +38,14 @@ usersRouter.get("/stats", requireAuth, requireAdmin, async (_req, res) => {
   });
 });
 
+usersRouter.get("/me/favorites", requireAuth, async (req, res) => {
+  const favorites = await prisma.favorite.findMany({
+    where: { userId: req.user!.userId },
+    select: { marketId: true },
+  });
+  res.json({ marketIds: favorites.map((f) => f.marketId) });
+});
+
 usersRouter.get("/leaderboard", async (_req, res) => {
   const resolvedBets = await prisma.bet.groupBy({
     by: ["userId"],

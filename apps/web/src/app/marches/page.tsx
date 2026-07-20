@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { CATEGORY_LABELS, type Market, type MarketCategory } from "@/lib/types";
-import { MarketCard } from "@/components/market-card";
+import { MarketGrid } from "@/components/market-grid";
 
-type SearchParams = { category?: string; status?: string };
+type SearchParams = { category?: string; status?: string; search?: string; sort?: string };
+
+const SORTS: Record<string, string> = {
+  recent: "Plus récents",
+  volume: "Volume",
+  closing: "Clôture proche",
+};
 
 async function getMarkets(params: SearchParams): Promise<Market[]> {
   const query = new URLSearchParams();
   if (params.category) query.set("category", params.category);
   if (params.status) query.set("status", params.status);
+  if (params.search) query.set("search", params.search);
+  if (params.sort) query.set("sort", params.sort);
   const qs = query.toString();
   const data = await apiFetch<{ markets: Market[] }>(`/markets${qs ? `?${qs}` : ""}`);
   return data.markets;
@@ -21,6 +29,8 @@ function filterHref(current: SearchParams, patch: Partial<SearchParams>) {
   const query = new URLSearchParams();
   if (next.category) query.set("category", next.category);
   if (next.status) query.set("status", next.status);
+  if (next.search) query.set("search", next.search);
+  if (next.sort) query.set("sort", next.sort);
   const qs = query.toString();
   return `/marches${qs ? `?${qs}` : ""}`;
 }
@@ -30,6 +40,9 @@ function pillClass(active: boolean) {
     active ? "border-brand bg-brand/10 text-brand" : "border-line text-muted hover:text-paper"
   }`;
 }
+
+const inputClass =
+  "rounded-full border border-line bg-ink px-3.5 py-1.5 text-sm text-paper outline-none focus-visible:border-brand";
 
 export default async function MarchesPage({
   searchParams,
@@ -46,7 +59,29 @@ export default async function MarchesPage({
         {markets.length} marché{markets.length > 1 ? "s" : ""}
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center gap-2">
+      <form action="/marches" method="get" className="mt-6 flex flex-wrap items-center gap-2">
+        {params.status && <input type="hidden" name="status" value={params.status} />}
+        {params.category && <input type="hidden" name="category" value={params.category} />}
+        <input
+          type="text"
+          name="search"
+          defaultValue={params.search ?? ""}
+          placeholder="Rechercher un marché…"
+          className={`${inputClass} min-w-0 flex-1 sm:flex-none sm:w-64`}
+        />
+        <select name="sort" defaultValue={params.sort ?? "recent"} className={inputClass}>
+          {Object.entries(SORTS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className={pillClass(false)}>
+          Filtrer
+        </button>
+      </form>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Link href={filterHref(params, { status: undefined })} className={pillClass(!params.status)}>
           Tous
         </Link>
@@ -67,15 +102,7 @@ export default async function MarchesPage({
         ))}
       </div>
 
-      {markets.length === 0 ? (
-        <p className="mt-16 text-center text-muted">Aucun marché ne correspond à ces filtres pour l&apos;instant.</p>
-      ) : (
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {markets.map((market) => (
-            <MarketCard key={market.id} market={market} />
-          ))}
-        </div>
-      )}
+      <MarketGrid markets={markets} />
     </div>
   );
 }
