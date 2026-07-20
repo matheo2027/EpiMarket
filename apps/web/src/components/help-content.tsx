@@ -63,6 +63,13 @@ export function UserGuideContent() {
         </p>
       </Section>
 
+      <Section title="Le Classement">
+        <p>
+          Accessible sans être connecté, il liste les 50 meilleurs parieurs classés par gain net réalisé
+          (même calcul que sur votre Profil). Seuls les paris déjà résolus comptent.
+        </p>
+      </Section>
+
       <Section title="Signaler un problème">
         <p>
           La page <strong>Support</strong> permet de créer un ticket (sujet + message). Si vous y arrivez

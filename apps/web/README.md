@@ -24,6 +24,8 @@ src/app/
   marches/page.tsx             liste des marchés, filtres catégorie/statut
   marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
                                 (deux mises en page selon market.type — OUI/NON ou options multiples)
+  classement/page.tsx          classement public des meilleurs parieurs (gain net réalisé), Server
+                                Component comme marches/page.tsx — pas besoin d'être connecté
   connexion/, inscription/     auth
   portefeuille/page.tsx        page "Profil" : solde, wallet on-chain, stats (taux de réussite, P&L,
                                 répartition par catégorie, courbe de gains/pertes), historique des paris

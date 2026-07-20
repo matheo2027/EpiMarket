@@ -175,6 +175,11 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
 - `GET /users/:id` — soi-même ou admin
 - `GET /users/stats` — (admin) compteurs globaux (utilisateurs, marchés ouverts/résolus, paris, volume) pour le bandeau en haut des pages admin.
+- `GET /users/leaderboard` — public. Top 50 utilisateurs classés par gain net réalisé (`payout - amount`
+  sur leurs paris résolus uniquement, même définition que les stats de la page Profil), agrégé
+  directement en base (`prisma.bet.groupBy`) plutôt que de recalculer côté client. Les utilisateurs sans
+  aucun pari résolu n'apparaissent pas. Doit rester déclarée avant `GET /users/:id` (sinon Express
+  interprète `leaderboard` comme un `:id`).
 - `POST /tickets` — créer un ticket de support (utilisateur connecté), avec `betId`/`marketId`/`txHash` optionnels pour le lier à un pari précis.
 - `GET /tickets` — les tickets de l'utilisateur connecté ; `GET /tickets?all=true` (admin) — tous les tickets, avec l'auteur.
 - `GET /tickets/:id` — un ticket (propriétaire ou admin).

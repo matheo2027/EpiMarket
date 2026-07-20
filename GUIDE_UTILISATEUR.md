@@ -11,6 +11,7 @@ Ce guide explique comment utiliser le site, côté visiteur/parieur et côté ad
 - [Placer un pari](#placer-un-pari)
 - [Le Profil](#le-profil)
 - [Comment sont calculés les gains](#comment-sont-calculés-les-gains)
+- [Le Classement](#le-classement)
 - [Signaler un problème](#signaler-un-problème)
 - [Espace administrateur](#espace-administrateur)
 - [Questions fréquentes](#questions-fréquentes)
@@ -111,6 +112,12 @@ Le site utilise un modèle **pari-mutuel**, comme aux courses hippiques plutôt 
 Sur un marché à **options multiples**, c'est exactement le même principe, généralisé à plus de deux camps (comme une course hippique à plusieurs chevaux plutôt qu'un pari à deux issues) : tout le pot misé est reversé aux parieurs de l'option gagnante, au prorata de leur mise.
 
 C'est pour cette raison que le "gain estimé" affiché avant de parier est une estimation, pas une garantie : le montant final dépend de qui d'autre parie, et de quel côté, avant la clôture.
+
+---
+
+## Le Classement
+
+Accessible via le lien **Classement** dans le header, sans avoir besoin d'être connecté. Il liste les 50 meilleurs parieurs, classés par **gain net réalisé** (le même calcul que sur votre page Profil), du plus gros gain à la plus grosse perte. Seuls les paris déjà résolus comptent — un pari en cours n'affecte pas le classement tant que le marché n'est pas conclu. Les comptes qui n'ont encore aucun pari résolu n'apparaissent pas dans la liste.
 
 ---
 

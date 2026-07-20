@@ -38,6 +38,7 @@ export function Header() {
 
         <nav className="hidden items-center gap-1 rounded-full border border-line bg-surface-raised p-1 sm:flex">
           <NavLink href="/marches" label="Marchés" active={pathname.startsWith("/marches")} />
+          <NavLink href="/classement" label="Classement" active={pathname.startsWith("/classement")} />
           {user && user.role !== "ADMIN" && (
             <NavLink href="/portefeuille" label="Profil" active={pathname.startsWith("/portefeuille")} />
           )}
