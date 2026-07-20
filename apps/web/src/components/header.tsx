@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { HelpModal } from "@/components/help-modal";
 
 function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
   return (
@@ -21,6 +23,7 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
 export function Header() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <header className="sticky top-4 z-40 mt-4 px-3 sm:px-6">
@@ -47,6 +50,14 @@ export function Header() {
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setHelpOpen(true)}
+            aria-label="Comment ça fonctionne"
+            title="Comment ça fonctionne"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-muted transition-colors hover:border-brand hover:text-paper"
+          >
+            ?
+          </button>
           <ThemeToggle />
           {loading ? null : user ? (
             <>
@@ -80,6 +91,12 @@ export function Header() {
           )}
         </div>
       </div>
+
+      <HelpModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        variant={user?.role === "ADMIN" ? "admin" : "user"}
+      />
     </header>
   );
 }

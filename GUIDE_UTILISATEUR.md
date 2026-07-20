@@ -50,15 +50,20 @@ Chaque marché est présenté sous forme de carte : catégorie, titre, barre de 
 
 ## Comprendre un marché
 
-Un marché pose une question à laquelle la réponse est **oui ou non** (ex : *"La France remporte-t-elle l'Euro 2028 ?"*). Sur sa page de détail, vous trouverez :
+Il existe deux types de marché :
+
+- **OUI/NON** (le plus courant) : une question à laquelle la réponse est **oui ou non** (ex : *"La France remporte-t-elle l'Euro 2028 ?"*).
+- **Options multiples** : une question à plusieurs réponses possibles, entre 3 et 6 (ex : *"Qui remporte le tournoi ?"* avec une option par équipe, ou une question à échéances comme sur Polymarket). Un seul camp peut gagner ; à la clôture, l'admin désigne l'option correcte.
+
+Sur la page de détail d'un marché, vous trouverez :
 
 - **La description générale** du marché.
-- **Ce qui compte comme "oui"** et **ce qui compte comme "non"** — la règle exacte de résolution, définie par l'admin qui a créé le marché. Lisez-la avant de parier : c'est elle qui décide qui gagne.
-- **La barre de répartition** : le pourcentage actuel associé à OUI et à NON. Ce pourcentage évolue à chaque pari — c'est la "cote" du marché, une estimation de la probabilité perçue par les parieurs.
-- **Le graphe d'évolution du prix** : comment la cote du OUI a bougé dans le temps. Un marché tout juste créé, sans aucun pari, n'a pas encore de courbe — le graphe l'indique.
+- Pour un marché OUI/NON : **ce qui compte comme "oui"** et **ce qui compte comme "non"** — la règle exacte de résolution, définie par l'admin qui a créé le marché. Lisez-la avant de parier : c'est elle qui décide qui gagne.
+- **La cote actuelle** : pour OUI/NON, une barre de répartition OUI/NON ; pour options multiples, une ligne par option avec son pourcentage. Ça évolue à chaque pari — c'est une estimation de la probabilité perçue par les parieurs.
+- **Le graphe d'évolution du prix** : comment la cote a bougé dans le temps (une courbe OUI/NON, ou une courbe par option). Un marché tout juste créé, sans aucun pari, n'a pas encore de courbe — le graphe l'indique.
 - **Le volume total** misé sur ce marché, et les **dates de début et de clôture**.
 
-Une fois qu'un marché est **résolu**, il affiche le résultat final (OUI ou NON) et n'accepte plus de paris.
+Une fois qu'un marché est **résolu**, il affiche le résultat final (OUI/NON, ou l'option gagnante) et n'accepte plus de paris.
 
 ---
 
@@ -66,7 +71,7 @@ Une fois qu'un marché est **résolu**, il affiche le résultat final (OUI ou NO
 
 Sur la page d'un marché ouvert, si vous êtes connecté, un formulaire vous permet de :
 
-1. Choisir votre camp : **OUI** ou **NON**.
+1. Choisir votre camp : **OUI** ou **NON** (ou, pour un marché à options multiples, l'une des options proposées).
 2. Entrer un montant en euros (virtuels).
 3. Voir un **gain estimé** avant de valider.
 4. Cliquer sur **Placer le pari**.
@@ -103,6 +108,8 @@ Le site utilise un modèle **pari-mutuel**, comme aux courses hippiques plutôt 
 
 **Cas particulier** : si personne n'a parié sur le camp qui gagne, tout le monde est simplement remboursé (aucun gain, aucune perte) — il n'y a personne à qui redistribuer l'argent des perdants.
 
+Sur un marché à **options multiples**, c'est exactement le même principe, généralisé à plus de deux camps (comme une course hippique à plusieurs chevaux plutôt qu'un pari à deux issues) : tout le pot misé est reversé aux parieurs de l'option gagnante, au prorata de leur mise.
+
 C'est pour cette raison que le "gain estimé" affiché avant de parier est une estimation, pas une garantie : le montant final dépend de qui d'autre parie, et de quel côté, avant la clôture.
 
 ---
@@ -123,9 +130,11 @@ Un compte Admin n'a **pas de portefeuille** et **ne peut pas parier** : il n'y a
 
 ### Marchés
 
-- **+ Nouveau marché** : titre, description, description du "oui", description du "non", catégorie, date de début, date de clôture.
+- **+ Nouveau marché** : titre, description, catégorie, date de début, date de clôture, et selon le type choisi :
+  - **OUI/NON** : description du "oui", description du "non".
+  - **Options multiples** : une liste de libellés (3 à 6, ajoutables/supprimables avant validation). Une option **"Autre"** est pré-remplie en dernière position par défaut — supprimez-la si elle ne convient pas, ou ajoutez d'autres options avant elle, elle reste toujours en dernier. Le type et le nombre d'options ne peuvent plus changer après la création (fixés sur la blockchain) ; les libellés eux-mêmes restent modifiables via **Éditer**.
 - **Éditer** : modifie un marché — impossible une fois qu'il est résolu.
-- **Conclure OUI / Conclure NON** : clôture le marché sur ce résultat et **règle les gains immédiatement** (voir la section précédente). Une confirmation est demandée : cette action est irréversible.
+- **Conclure OUI / Conclure NON** (marché OUI/NON) ou **choisir l'option gagnante puis Conclure** (marché à options multiples) : clôture le marché sur ce résultat et **règle les gains immédiatement** (voir la section précédente). Une confirmation est demandée : cette action est irréversible.
 - **Supprimer** : possible uniquement si le marché n'a encore reçu aucun pari et n'est pas résolu (pour ne jamais perdre un historique de paris ou de résolution).
 
 ### Paris
@@ -153,6 +162,8 @@ Un tableau de bord qui détecte automatiquement les cas où la base de données 
 - **Soldes désynchronisés** : le solde affiché pour un utilisateur ne correspond plus à son solde réel sur la blockchain. Bouton **Resynchroniser le solde**.
 
 Si tout est cohérent, chaque section affiche simplement une coche verte. Chaque bouton de correction déclenche une vraie action (transaction blockchain ou relecture du solde réel) et demande une confirmation avant de s'exécuter, comme les autres actions sensibles de l'espace admin.
+
+Si vous ouvrez cette page juste après avoir démarré le projet, un message "Blockchain locale en cours de démarrage…" peut s'afficher quelques secondes : la page réessaie toute seule en arrière-plan, pas besoin de recharger.
 
 Toutes les actions destructrices ou irréversibles (conclure, supprimer, resynchroniser) demandent une confirmation via une fenêtre du site avant d'être exécutées.
 

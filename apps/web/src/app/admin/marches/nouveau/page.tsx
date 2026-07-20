@@ -29,14 +29,18 @@ export default function NewMarketPage() {
         initialValues={{
           title: "",
           description: "",
+          type: "BINARY",
           yesDescription: "",
           noDescription: "",
+          options: ["", "", "", "Autre"],
           category: "OTHER",
           startDate: "",
           endDate: "",
         }}
         submitLabel="Créer le marché"
         onSubmit={handleSubmit}
+        allowTypeChange
+        allowOptionCountChange
       />
     </div>
   );

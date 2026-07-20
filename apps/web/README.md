@@ -23,6 +23,7 @@ src/app/
   page.tsx                     accueil : carousel de stats globales + marché vedette + grille des marchés ouverts
   marches/page.tsx             liste des marchés, filtres catégorie/statut
   marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
+                                (deux mises en page selon market.type — OUI/NON ou options multiples)
   connexion/, inscription/     auth
   portefeuille/page.tsx        page "Profil" : solde, wallet on-chain, stats (taux de réussite, P&L,
                                 répartition par catégorie, courbe de gains/pertes), historique des paris
@@ -37,15 +38,18 @@ src/app/
 
 ## Composants notables
 
-- `components/split-bar.tsx` — la barre de répartition OUI/NON, réutilisée partout où une cote est affichée.
-- `components/price-chart.tsx`, `components/pnl-chart.tsx`, `components/stat-chart.tsx` — graphes en SVG fait main (pas de librairie de charts), partagent le même langage visuel (aire dégradée, ligne avec glow). `stat-chart.tsx` et `pnl-chart.tsx` se pilotent à la souris (survol = déplacement dans le temps, sans clic) ou via les flèches en bas du graphe (clic maintenu = défilement continu, `lib/use-hold-repeat.ts`).
+- `components/split-bar.tsx` — la barre de répartition OUI/NON pour un marché `BINARY`, réutilisée partout où une cote est affichée.
+- `components/options-bar.tsx` — l'équivalent pour un marché `MULTI` : une ligne par option (libellé + barre + %), triée par ordre de création. `compact` limite l'affichage aux 4 premières (cartes de marché).
+- `components/price-chart.tsx`, `components/options-price-chart.tsx`, `components/pnl-chart.tsx`, `components/stat-chart.tsx` — graphes en SVG fait main (pas de librairie de charts), partagent le même langage visuel (aire dégradée, ligne avec glow). `price-chart.tsx` trace les deux courbes OUI/NON (miroir l'une de l'autre) ; `options-price-chart.tsx` trace une courbe par option (jusqu'à 6, `lib/option-tones.ts`) avec une légende au lieu d'une grosse valeur unique. Tous se pilotent à la souris (survol = déplacement dans le temps, sans clic) ou via les flèches en bas du graphe (clic maintenu = défilement continu, `lib/use-hold-repeat.ts`).
+- `lib/option-tones.ts` — palette catégorielle fixe (brand/yes/series-3..6) partagée par `options-bar.tsx` et `options-price-chart.tsx`, pour qu'une option garde toujours la même couleur aux deux endroits.
 - `components/stat-carousel.tsx` — carousel glissable (souris ou tactile) entre les 4 statistiques de l'accueil, chacune dans sa propre couleur (palette catégorielle validée avec le skill dataviz).
 - `components/animated-number.tsx` — anime un nombre affiché d'une valeur à l'autre (count-up), utilisé pour tous les gros chiffres (KPI, stats de profil).
 - `components/theme-toggle.tsx` + `lib/theme-context.tsx` — bascule clair/sombre, sans flash au chargement (script inline dans `layout.tsx` qui pose `data-theme` avant l'hydratation).
-- `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin.
+- `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin. Le type (`BINARY`/`MULTI`) ne se choisit qu'à la création ; pour `MULTI`, une liste dynamique de libellés d'options (3 à 6) remplace les champs OUI/NON, et le nombre d'options est verrouillé une fois le marché créé (fixé on-chain). À la création, un 4ᵉ slot par défaut est pré-rempli avec "Autre" (aucun traitement spécial ailleurs dans le code — c'est une option comme les autres, le règlement pari-mutuel ne distingue pas son `optionId`) ; `addOption()` insère les nouveaux slots juste avant elle pour qu'elle reste toujours en dernière position.
 - `components/admin-stats.tsx` — bandeau de compteurs globaux en haut des pages admin (`GET /users/stats`).
 - `lib/bet-stats.ts` — calcule les statistiques de la page Profil (taux de réussite, P&L, répartition par catégorie, historique) à partir de la liste brute des paris de l'utilisateur.
 - `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives ou déclenchant une vraie transaction blockchain (conclure, supprimer, resynchroniser).
+- `app/admin/diagnostics/page.tsx` — si `GET /diagnostics` renvoie `503` (blockchain locale pas encore joignable, typiquement juste après `npm run dev`), la page affiche un message d'attente et réessaie automatiquement toutes les 3s (jusqu'à 10 fois) au lieu d'afficher une erreur ; au-delà, un bouton "Réessayer" manuel apparaît.
 
 ## Design
 

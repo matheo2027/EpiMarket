@@ -43,11 +43,15 @@ export default function EditMarketPage() {
   if (!market) return <p className="text-sm text-muted">Chargement…</p>;
 
   if (market.status === "RESOLVED") {
+    const resolvedLabel =
+      market.type === "MULTI"
+        ? (market.options?.find((o) => o.id === market.resolvedOptionId)?.label ?? "—")
+        : market.resolvedOutcome === "YES"
+          ? "OUI"
+          : "NON";
     return (
       <div className="max-w-2xl rounded-2xl border border-line bg-surface p-5">
-        <p className="text-sm text-muted">
-          Ce marché est résolu ({market.resolvedOutcome === "YES" ? "OUI" : "NON"}) et ne peut plus être modifié.
-        </p>
+        <p className="text-sm text-muted">Ce marché est résolu ({resolvedLabel}) et ne peut plus être modifié.</p>
       </div>
     );
   }
@@ -59,8 +63,10 @@ export default function EditMarketPage() {
         initialValues={{
           title: market.title,
           description: market.description,
-          yesDescription: market.yesDescription,
-          noDescription: market.noDescription,
+          type: market.type,
+          yesDescription: market.yesDescription ?? "",
+          noDescription: market.noDescription ?? "",
+          options: market.options?.length ? market.options.map((o) => o.label) : ["", "", ""],
           category: market.category,
           startDate: toDatetimeLocal(market.startDate),
           endDate: toDatetimeLocal(market.endDate),

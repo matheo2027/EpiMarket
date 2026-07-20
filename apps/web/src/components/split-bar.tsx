@@ -11,16 +11,15 @@ type SplitBarProps = {
 
 export function SplitBar({ yesPrice, size = "sm", animateIn = false }: SplitBarProps) {
   const targetYesPct = Math.round(yesPrice * 100);
-  const [displayYesPct, setDisplayYesPct] = useState(animateIn ? 50 : targetYesPct);
+  const [animatedYesPct, setAnimatedYesPct] = useState(50);
 
   useEffect(() => {
-    if (!animateIn) {
-      setDisplayYesPct(targetYesPct);
-      return;
-    }
-    const raf = requestAnimationFrame(() => setDisplayYesPct(targetYesPct));
+    if (!animateIn) return;
+    const raf = requestAnimationFrame(() => setAnimatedYesPct(targetYesPct));
     return () => cancelAnimationFrame(raf);
   }, [targetYesPct, animateIn]);
+
+  const displayYesPct = animateIn ? animatedYesPct : targetYesPct;
 
   const noPct = 100 - displayYesPct;
   const barHeight = size === "lg" ? "h-4" : "h-2";

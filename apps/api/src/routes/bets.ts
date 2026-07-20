@@ -2,7 +2,7 @@ import { Router } from "express";
 import { type BetSide, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { currentUserRole, requireAuth } from "../middleware/auth.js";
-import { computePrices } from "../pricing.js";
+import { computeOptionPrices, computePrices } from "../pricing.js";
 import {
   getOnChainBalance,
   getReadOnlyContract,
@@ -15,14 +15,10 @@ import { fromChainAmount, toChainAmount } from "../blockchain/units.js";
 export const betsRouter = Router();
 
 betsRouter.post("/", requireAuth, async (req, res) => {
-  const { marketId, side, amount } = req.body ?? {};
+  const { marketId, side, optionId, amount } = req.body ?? {};
 
   if (typeof marketId !== "string") {
     res.status(400).json({ error: "marketId is required" });
-    return;
-  }
-  if (side !== "YES" && side !== "NO") {
-    res.status(400).json({ error: "side must be YES or NO" });
     return;
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
@@ -30,11 +26,36 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     return;
   }
 
-  const market = await prisma.market.findUnique({ where: { id: marketId } });
+  const market = await prisma.market.findUnique({
+    where: { id: marketId },
+    include: { options: { orderBy: { sortOrder: "asc" } } },
+  });
   if (!market) {
     res.status(404).json({ error: "Market not found" });
     return;
   }
+
+  let betSide: BetSide | undefined;
+  let option: (typeof market.options)[number] | undefined;
+
+  if (market.type === "MULTI") {
+    if (typeof optionId !== "string") {
+      res.status(400).json({ error: "optionId is required" });
+      return;
+    }
+    option = market.options.find((o) => o.id === optionId);
+    if (!option) {
+      res.status(400).json({ error: "optionId does not belong to this market" });
+      return;
+    }
+  } else {
+    if (side !== "YES" && side !== "NO") {
+      res.status(400).json({ error: "side must be YES or NO" });
+      return;
+    }
+    betSide = side as BetSide;
+  }
+
   if (market.status !== "OPEN") {
     res.status(400).json({ error: "Market is not open for betting" });
     return;
@@ -65,12 +86,21 @@ betsRouter.post("/", requireAuth, async (req, res) => {
   }
   const walletAddress = user.walletAddress;
 
-  const { yesPrice: priceAtBet, noPrice: noPriceAtBet } = computePrices(market);
-  const betSide = side as BetSide;
+  let priceAtBet: number;
+  if (market.type === "MULTI") {
+    const priced = computeOptionPrices(market.options);
+    priceAtBet = priced.find((o) => o.id === option!.id)!.price;
+  } else {
+    const { yesPrice, noPrice } = computePrices(market);
+    priceAtBet = betSide === "YES" ? yesPrice : noPrice;
+  }
 
   let txHash: string;
   try {
-    const tx = await getUserContract(user).placeBet(market.id, sideToOutcome(betSide), toChainAmount(amount));
+    const tx =
+      market.type === "MULTI"
+        ? await getUserContract(user).placeMultiBet(market.id, option!.sortOrder, toChainAmount(amount))
+        : await getUserContract(user).placeBet(market.id, sideToOutcome(betSide!), toChainAmount(amount));
     txHash = tx.hash;
     await tx.wait();
   } catch (err) {
@@ -81,8 +111,59 @@ betsRouter.post("/", requireAuth, async (req, res) => {
   const settledAmount = fromChainAmount(toChainAmount(amount));
 
   try {
-    const onChainMarket = await getReadOnlyContract().markets(market.id);
     const newBalance = await getOnChainBalance(walletAddress);
+
+    if (market.type === "MULTI") {
+      const [pools, totalVolumeUnits] = await getReadOnlyContract().getMultiMarket(market.id);
+
+      const { bet } = await prisma.$transaction(async (tx) => {
+        const bet = await tx.bet.create({
+          data: {
+            userId: user.id,
+            marketId: market.id,
+            optionId: option!.id,
+            amount: settledAmount,
+            price: priceAtBet,
+            txHash,
+          },
+        });
+
+        for (let i = 0; i < market.options.length; i++) {
+          await tx.marketOption.update({
+            where: { id: market.options[i].id },
+            data: { pool: fromChainAmount(pools[i]) },
+          });
+        }
+        await tx.market.update({
+          where: { id: market.id },
+          data: { totalVolume: fromChainAmount(totalVolumeUnits) },
+        });
+
+        const newPrices = computeOptionPrices(
+          market.options.map((o, i) => ({ ...o, pool: fromChainAmount(pools[i]) })),
+        );
+        const priceTimestamp = new Date();
+        await tx.optionPricePoint.createMany({
+          data: newPrices.map((o) => ({ optionId: o.id, price: o.price, timestamp: priceTimestamp })),
+        });
+        await tx.user.update({ where: { id: user.id }, data: { walletBalance: newBalance } });
+
+        return { bet };
+      });
+
+      const updatedMarket = await prisma.market.findUniqueOrThrow({
+        where: { id: market.id },
+        include: { options: { orderBy: { sortOrder: "asc" } } },
+      });
+
+      res.status(201).json({
+        bet,
+        market: { ...updatedMarket, options: computeOptionPrices(updatedMarket.options) },
+      });
+      return;
+    }
+
+    const onChainMarket = await getReadOnlyContract().markets(market.id);
 
     const { bet, updatedMarket } = await prisma.$transaction(async (tx) => {
       const bet = await tx.bet.create({
@@ -91,7 +172,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
           marketId: market.id,
           side: betSide,
           amount: settledAmount,
-          price: betSide === "YES" ? priceAtBet : noPriceAtBet,
+          price: priceAtBet,
           txHash,
         },
       });
@@ -118,7 +199,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error(
-      `Bet placed on-chain (tx ${txHash}) but syncing it to the database failed — user ${user.id}, market ${market.id}, side ${betSide}, amount ${settledAmount}:`,
+      `Bet placed on-chain (tx ${txHash}) but syncing it to the database failed — user ${user.id}, market ${market.id}, amount ${settledAmount}:`,
       err,
     );
     res.status(500).json({
@@ -141,6 +222,7 @@ betsRouter.get("/", requireAuth, async (req, res) => {
         where,
         include: {
           market: true,
+          option: true,
           user: {
             select: {
               id: true,
@@ -155,7 +237,7 @@ betsRouter.get("/", requireAuth, async (req, res) => {
         },
         orderBy: { createdAt: "desc" },
       })
-    : await prisma.bet.findMany({ where, include: { market: true }, orderBy: { createdAt: "desc" } });
+    : await prisma.bet.findMany({ where, include: { market: true, option: true }, orderBy: { createdAt: "desc" } });
 
   res.json({ bets });
 });
@@ -163,7 +245,7 @@ betsRouter.get("/", requireAuth, async (req, res) => {
 betsRouter.get("/:id", requireAuth, async (req, res) => {
   const bet = await prisma.bet.findUnique({
     where: { id: req.params.id },
-    include: { market: true },
+    include: { market: true, option: true },
   });
   if (!bet) {
     res.status(404).json({ error: "Bet not found" });

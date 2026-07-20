@@ -42,28 +42,47 @@ Relation : un `User` a plusieurs `Bet`.
 
 ### `Market`
 
-Un marché de prédiction binaire (oui/non).
+Un marché de prédiction. Deux types, distingués par `type` :
+
+- `BINARY` (par défaut) — oui/non, le modèle historique, décrit ci-dessous.
+- `MULTI` — plusieurs issues (3 à 6), voir [Marchés à options multiples](#marchés-à-options-multiples) plus bas.
 
 | Champ             | Type             | Notes                                                        |
 | ----------------- | ---------------- | -------------------------------------------------------------- |
 | `id`                | `String`         | cuid                                                            |
 | `title`             | `String`         | question du marché                                              |
 | `description`       | `String`         | description générale                                            |
-| `yesDescription`    | `String`         | ce qui compte comme "oui"                                       |
-| `noDescription`     | `String`         | ce qui compte comme "non"                                       |
+| `type`              | `MarketType`     | `BINARY` \| `MULTI`                                              |
+| `yesDescription`    | `String?`        | ce qui compte comme "oui" — `BINARY` uniquement, `null` pour `MULTI` |
+| `noDescription`     | `String?`        | ce qui compte comme "non" — `BINARY` uniquement, `null` pour `MULTI` |
 | `category`          | `MarketCategory` | `POLITICS`, `SPORTS`, `CRYPTO`, `ECONOMY`, `SCIENCE_TECH`, `POP_CULTURE`, `OTHER` |
 | `status`            | `MarketStatus`   | `OPEN` \| `RESOLVED`                                             |
-| `resolvedOutcome`   | `BetSide?`       | `YES` \| `NO`, rempli seulement quand le marché est conclu       |
+| `resolvedOutcome`   | `BetSide?`       | `YES` \| `NO`, rempli seulement pour un marché `BINARY` conclu   |
+| `resolvedOptionId`  | `String?`        | FK vers `MarketOption`, rempli seulement pour un marché `MULTI` conclu |
 | `startDate`         | `DateTime`       | début du marché                                                 |
 | `endDate`           | `DateTime`       | fin prévue                                                       |
-| `yesPool`/`noPool`  | `Decimal`        | liquidités virtuelles utilisées pour calculer la cote (voir plus bas) |
-| `totalVolume`       | `Decimal`        | somme des montants misés sur ce marché                          |
+| `yesPool`/`noPool`  | `Decimal`        | liquidités virtuelles utilisées pour calculer la cote (`BINARY`, voir plus bas) |
+| `totalVolume`       | `Decimal`        | somme des montants réellement misés sur ce marché (hors liquidité virtuelle de départ) |
 | `createdAt`         | `DateTime`       |                                                                  |
 | `resolvedAt`        | `DateTime?`      |                                                                  |
 
-Relations : un `Market` a plusieurs `Bet` et plusieurs `PricePoint`.
+Relations : un `Market` a plusieurs `Bet`, plusieurs `PricePoint` et (pour `MULTI`) plusieurs `MarketOption`.
 
 **Cotes yes/no** : modèle pari-mutuel simplifié. `yesPool`/`noPool` représentent la somme cumulée misée sur chaque camp (initialisées à 50/50 comme liquidité virtuelle de départ, pour éviter une division par zéro et démarrer à une cote 50/50). Le prix (probabilité implicite) du "oui" se calcule comme `yesPool / (yesPool + noPool)` — plus les paris "oui" affluent, plus `yesPool` grandit et plus le prix du "oui" augmente. Voir `src/pricing.ts`. Chaque pari incrémente le pool du camp choisi et `totalVolume`, et log un `PricePoint` avec le nouveau prix.
+
+### `MarketOption`
+
+Une option d'un marché `MULTI` (ex. "Équipe A"). N'existe que pour ce type de marché.
+
+| Champ       | Type      | Notes                                              |
+| ----------- | --------- | ----------------------------------------------------- |
+| `id`          | `String`  | cuid                                                  |
+| `label`       | `String`  | libellé affiché (ex. "31 août", "Équipe A")           |
+| `sortOrder`   | `Int`     | ordre d'affichage, fixé à la création (0-indexé) — c'est aussi l'index utilisé on-chain (`placeMultiBet`/`resolveMultiMarket`) |
+| `pool`        | `Decimal` | liquidité cumulée misée sur cette option (virtuelle 50 de départ incluse, même convention que `yesPool`/`noPool`) |
+| `marketId`    | `String`  | FK vers `Market`, `onDelete: Cascade`                 |
+
+**Cote d'une option** : `pool_i / somme(tous les pools)`, généralisation directe de la formule OUI/NON à N options (`computeOptionPrices` dans `src/pricing.ts`).
 
 ### `Bet`
 
@@ -72,27 +91,33 @@ Un pari placé par un utilisateur sur un marché.
 | Champ       | Type       | Notes                                    |
 | ----------- | ---------- | ------------------------------------------ |
 | `id`          | `String`   | cuid                                       |
-| `side`        | `BetSide`  | `YES` \| `NO`                               |
+| `side`        | `BetSide?` | `YES` \| `NO` — pari sur un marché `BINARY`, `null` pour un marché `MULTI` |
+| `optionId`    | `String?`  | FK vers `MarketOption` — pari sur un marché `MULTI`, `null` pour un marché `BINARY` |
 | `amount`      | `Decimal`  | montant misé                               |
-| `price`       | `Decimal`  | prix du camp choisi au moment du pari (0 à 1) |
+| `price`       | `Decimal`  | prix du camp/de l'option choisi au moment du pari (0 à 1) |
 | `payout`      | `Decimal?` | `null` tant que le marché est ouvert, sinon montant reçu (0 si perdant) — copié depuis le contrat, jamais recalculé en TypeScript |
-| `txHash`      | `String?`  | hash de la transaction `placeBet` on-chain, preuve du pari réel sur la chaîne |
+| `txHash`      | `String?`  | hash de la transaction `placeBet`/`placeMultiBet` on-chain, preuve du pari réel sur la chaîne |
 | `createdAt`   | `DateTime` |                                             |
 | `userId`      | `String`   | FK vers `User`                             |
 | `marketId`    | `String`   | FK vers `Market`                           |
 
-### `PricePoint`
+Exactement un de `side`/`optionId` est renseigné, selon `market.type`.
 
-Historique du prix d'un marché, pour le graphe d'évolution du prix.
+### `PricePoint` / `OptionPricePoint`
+
+Historique du prix, pour le graphe d'évolution. `PricePoint` (prix du "oui") pour un marché `BINARY`,
+`OptionPricePoint` (prix d'une option) pour un marché `MULTI` — deux modèles séparés plutôt qu'un
+champ `optionId` optionnel sur `PricePoint`, pour ne rien changer au modèle existant.
 
 | Champ       | Type       | Notes                        |
 | ----------- | ---------- | ------------------------------ |
 | `id`          | `String`   | cuid                          |
-| `yesPrice`    | `Decimal`  | prix du "oui" à cet instant   |
+| `yesPrice` / `price` | `Decimal` | prix à cet instant   |
 | `timestamp`   | `DateTime` |                               |
-| `marketId`    | `String`   | FK vers `Market`               |
+| `marketId` / `optionId` | `String` | FK vers `Market` / `MarketOption` |
 
-Un `PricePoint` est créé à chaque pari pour tracer la courbe.
+Un point est créé à chaque pari pour tracer la courbe (pour `MULTI`, un point par option à la même
+date, pour que les N courbes restent synchronisées sur le même axe des temps).
 
 ### `Ticket`
 
@@ -116,18 +141,32 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
   tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force.
-- `GET /markets`, `GET /markets/:id` — public
-- `GET /markets/:id/price-history` — public, liste des `PricePoint` triés par date (pour le graphe d'évolution). Un point à 0.5 est créé automatiquement à la création du marché.
+- `GET /markets`, `GET /markets/:id` — public. Renvoie `options` (avec le prix courant de chacune) pour
+  un marché `MULTI`.
+- `GET /markets/:id/price-history` — public. Pour un marché `BINARY`, liste des `PricePoint` triés par
+  date. Pour un marché `MULTI`, `{ options, optionPricePoints }` (une liste d'`OptionPricePoint` par
+  option). Le point de départ (0.5, ou 1/N par option) est créé automatiquement à la création du marché.
 - `GET /markets/stats/history` — public, série quotidienne (marchés ouverts, volume, paris actifs,
   parieurs distincts) reconstruite depuis l'historique des marchés/paris existants, pour les courbes de
   la page d'accueil.
-- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin. `PATCH`/`DELETE` refusés si le marché est déjà résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer). `POST /:id/resolve` est rappelable sans effet de bord : si un premier appel a résolu le marché on-chain mais échoué à synchroniser les gains/soldes en Postgres, un second appel avec le même `outcome` reprend uniquement la synchronisation au lieu de renvoyer une erreur bloquante (voir aussi `POST /diagnostics/resync-*` plus bas, qui s'appuie sur ce même mécanisme).
+- `POST /markets`, `PATCH /markets/:id`, `DELETE /markets/:id`, `POST /markets/:id/resolve` — admin.
+  `POST` accepte `type: "BINARY" | "MULTI"` (par défaut `BINARY`) ; pour `MULTI`, `options` (3 à 6
+  libellés) remplace `yesDescription`/`noDescription`. `PATCH`/`DELETE` refusés si le marché est déjà
+  résolu ; `DELETE` refusé aussi s'il a déjà des paris (résous-le plutôt que de le supprimer). `PATCH`
+  sur un marché `MULTI` peut renommer les options (`options`, même longueur exacte que l'existant — le
+  nombre d'options est fixé on-chain à la création et ne peut plus changer). `POST /:id/resolve` attend
+  `{ outcome: "YES" | "NO" }` pour `BINARY` ou `{ optionId }` pour `MULTI` ; il est rappelable sans effet
+  de bord : si un premier appel a résolu le marché on-chain mais échoué à synchroniser les gains/soldes
+  en Postgres, un second appel avec le même `outcome`/`optionId` reprend uniquement la synchronisation au
+  lieu de renvoyer une erreur bloquante (voir aussi `POST /diagnostics/resync-*` plus bas, qui s'appuie
+  sur ce même mécanisme).
 - `POST /bets` — placer un pari (utilisateur connecté, refusé avec `403` pour un compte `ADMIN` — voir
-  plus bas). Signe et envoie un vrai `placeBet` on-chain avec le wallet custodial de l'utilisateur,
-  attend la confirmation, puis reflète le résultat en Postgres (pools/volume/solde relus depuis le
-  contrat, jamais recalculés en TS) dans une seule transaction Postgres, elle-même protégée par un
-  `try/catch` : si la synchro échoue après une transaction on-chain déjà confirmée, l'API répond avec le
-  `txHash` de la transaction plutôt qu'une erreur générique, pour que l'utilisateur puisse le signaler
+  plus bas). Attend `{ marketId, side, amount }` pour un marché `BINARY` ou `{ marketId, optionId, amount }`
+  pour `MULTI`. Signe et envoie un vrai `placeBet`/`placeMultiBet` on-chain avec le wallet custodial de
+  l'utilisateur, attend la confirmation, puis reflète le résultat en Postgres (pools/volume/solde relus
+  depuis le contrat, jamais recalculés en TS) dans une seule transaction Postgres, elle-même protégée par
+  un `try/catch` : si la synchro échoue après une transaction on-chain déjà confirmée, l'API répond avec
+  le `txHash` de la transaction plutôt qu'une erreur générique, pour que l'utilisateur puisse le signaler
   (voir `POST /tickets`). Un revert Solidity (solde insuffisant, marché fermé...) devient un 400 avec le
   message du contrat.
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
@@ -140,19 +179,22 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 - `GET /tickets` — les tickets de l'utilisateur connecté ; `GET /tickets?all=true` (admin) — tous les tickets, avec l'auteur.
 - `GET /tickets/:id` — un ticket (propriétaire ou admin).
 - `PATCH /tickets/:id` — (admin) changer le `status` et/ou `adminNote` ; pose `resolvedAt` automatiquement en passant à `RESOLVED`.
-- `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain, paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
-- `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket`).
+- `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain (`BINARY` et `MULTI` tous deux vérifiés), paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
+- `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket` pour `BINARY`, `createMultiMarket` pour `MULTI`).
 - `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
+- Les trois routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
 
 ## Règlement des gains (settlement)
 
 Depuis l'intégration blockchain (voir plus bas), le calcul du règlement ne vit plus en TypeScript : il
-est fait par le contrat `EpiMarket` (`resolveMarket` dans `apps/blockchain/contracts/EpiMarket.sol`).
-Quand un marché est conclu (`POST /markets/:id/resolve`), la route :
+est fait par le contrat `EpiMarket` (`resolveMarket`/`resolveMultiMarket` dans
+`apps/blockchain/contracts/EpiMarket.sol`). Quand un marché est conclu (`POST /markets/:id/resolve`), la
+route :
 
-1. Appelle `resolveMarket` on-chain (signé par le wallet owner du contrat) et attend la confirmation.
-2. Relit chaque pari via `getBet` (le contrat expose maintenant le `payout` calculé par pari) et le
-   recopie dans `Bet.payout` — aucune formule pari-mutuel dupliquée côté API.
+1. Appelle `resolveMarket`/`resolveMultiMarket` on-chain selon `market.type` (signé par le wallet owner
+   du contrat) et attend la confirmation.
+2. Relit chaque pari via `getBet`/`getMultiBet` (le contrat expose maintenant le `payout` calculé par
+   pari) et le recopie dans `Bet.payout` — aucune formule pari-mutuel dupliquée côté API.
 3. Relit `balanceOf` pour chaque parieur concerné et met à jour `User.walletBalance`.
 
 Ces étapes 2-3 sont enveloppées dans une seule transaction Postgres (tout-ou-rien), pour que le miroir

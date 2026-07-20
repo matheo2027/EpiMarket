@@ -6,6 +6,7 @@ import { useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { truncateHash } from "@/lib/format";
+import { optionTone } from "@/lib/option-tones";
 import type { Bet, BetSide, Market } from "@/lib/types";
 
 const SEED_POOL_LIQUIDITY = 50;
@@ -22,10 +23,24 @@ function estimatePayout(market: Market, side: BetSide, amount: number): number {
   return (amount / newWinningPool) * newTotalPool;
 }
 
+function estimateOptionPayout(market: Market, optionId: string | null, amount: number): number {
+  if (!Number.isFinite(amount) || amount <= 0 || !optionId) return 0;
+  const options = market.options ?? [];
+  const realPools = options.map((o) => Math.max(0, Number(o.pool) - SEED_POOL_LIQUIDITY));
+  const idx = options.findIndex((o) => o.id === optionId);
+  if (idx === -1) return 0;
+
+  const newWinningPool = realPools[idx] + amount;
+  const newTotalPool = realPools.reduce((sum, p) => sum + p, 0) + amount;
+  return (amount / newWinningPool) * newTotalPool;
+}
+
 export function BetForm({ market }: { market: Market }) {
   const { user, token, refreshUser } = useAuth();
   const router = useRouter();
+  const sortedOptions = [...(market.options ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const [side, setSide] = useState<BetSide>("YES");
+  const [optionId, setOptionId] = useState<string | null>(sortedOptions[0]?.id ?? null);
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -60,8 +75,12 @@ export function BetForm({ market }: { market: Market }) {
     );
   }
 
+  const isMulti = market.type === "MULTI";
   const numericAmount = Number(amount);
-  const estimatedPayout = estimatePayout(market, side, numericAmount);
+  const estimatedPayout = isMulti
+    ? estimateOptionPayout(market, optionId, numericAmount)
+    : estimatePayout(market, side, numericAmount);
+  const selectedOption = sortedOptions.find((o) => o.id === optionId);
   const failedTxHash = error?.match(/tx (0x[a-fA-F0-9]+)/)?.[1] ?? null;
 
   async function handleSubmit(e: SubmitEvent) {
@@ -73,16 +92,21 @@ export function BetForm({ market }: { market: Market }) {
       setError("Entrez un montant valide.");
       return;
     }
+    if (isMulti && !optionId) {
+      setError("Choisissez une option.");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const data = await apiFetch<{ bet: Bet }>("/bets", {
         method: "POST",
         token,
-        body: { marketId: market.id, side, amount: numericAmount },
+        body: isMulti ? { marketId: market.id, optionId, amount: numericAmount } : { marketId: market.id, side, amount: numericAmount },
       });
       const txSuffix = data.bet.txHash ? ` (tx ${truncateHash(data.bet.txHash)})` : "";
-      setSuccess(`Pari placé : ${numericAmount} € sur ${side === "YES" ? "OUI" : "NON"}.${txSuffix}`);
+      const targetLabel = isMulti ? selectedOption?.label : side === "YES" ? "OUI" : "NON";
+      setSuccess(`Pari placé : ${numericAmount} € sur ${targetLabel}.${txSuffix}`);
       setAmount("");
       await refreshUser();
       router.refresh();
@@ -95,26 +119,48 @@ export function BetForm({ market }: { market: Market }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5">
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          onClick={() => setSide("YES")}
-          className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${
-            side === "YES" ? "border-yes bg-yes-soft text-yes" : "border-line text-muted hover:text-paper"
-          }`}
-        >
-          OUI · {Math.round(market.yesPrice * 100)}%
-        </button>
-        <button
-          type="button"
-          onClick={() => setSide("NO")}
-          className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${
-            side === "NO" ? "border-no bg-no-soft text-no" : "border-line text-muted hover:text-paper"
-          }`}
-        >
-          NON · {Math.round(market.noPrice * 100)}%
-        </button>
-      </div>
+      {isMulti ? (
+        <div className="flex flex-col gap-2">
+          {sortedOptions.map((option) => {
+            const tone = optionTone(option.sortOrder);
+            const selected = optionId === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setOptionId(option.id)}
+                className={`flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+                  selected ? `border-current ${tone.text} bg-surface-raised` : "border-line text-muted hover:text-paper"
+                }`}
+              >
+                <span className="truncate text-left">{option.label}</span>
+                <span className="shrink-0 font-mono tabular-nums">{Math.round(option.price * 100)}%</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setSide("YES")}
+            className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${
+              side === "YES" ? "border-yes bg-yes-soft text-yes" : "border-line text-muted hover:text-paper"
+            }`}
+          >
+            OUI · {Math.round(market.yesPrice * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => setSide("NO")}
+            className={`rounded-xl border py-3 text-sm font-semibold transition-colors ${
+              side === "NO" ? "border-no bg-no-soft text-no" : "border-line text-muted hover:text-paper"
+            }`}
+          >
+            NON · {Math.round(market.noPrice * 100)}%
+          </button>
+        </div>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-muted">Montant (€)</span>
@@ -130,7 +176,7 @@ export function BetForm({ market }: { market: Market }) {
       </label>
 
       <div className="flex items-center justify-between rounded-lg bg-surface-raised px-3.5 py-2.5 text-sm">
-        <span className="text-muted">Gain estimé si {side === "YES" ? "OUI" : "NON"}</span>
+        <span className="text-muted">Gain estimé si {isMulti ? (selectedOption?.label ?? "—") : side === "YES" ? "OUI" : "NON"}</span>
         <span className="font-mono tabular-nums text-paper">{estimatedPayout.toFixed(2)} €</span>
       </div>
       <p className="text-xs text-muted">

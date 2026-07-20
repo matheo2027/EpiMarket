@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { MarketCategory, MarketStatus, type Market } from "@prisma/client";
+import { MarketCategory, MarketStatus, MarketType, type Market, type MarketOption } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
-import { computePrices } from "../pricing.js";
+import { computeOptionPrices, computePrices } from "../pricing.js";
 import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
 import { runAsOwner } from "../blockchain/provider.js";
 import { fromChainAmount } from "../blockchain/units.js";
@@ -11,9 +11,23 @@ export const marketsRouter = Router();
 
 const CATEGORIES = Object.values(MarketCategory);
 const STATUSES = Object.values(MarketStatus);
+const MIN_OPTIONS = 3;
+const MAX_OPTIONS = 6;
 
-function serializeMarket(market: Market) {
+const optionsOrder = { options: { orderBy: { sortOrder: "asc" as const } } };
+
+function serializeMarket(market: Market & { options?: MarketOption[] }) {
+  if (market.type === "MULTI") {
+    return { ...market, options: computeOptionPrices(market.options ?? []) };
+  }
   return { ...market, ...computePrices(market) };
+}
+
+function validateOptionLabels(options: unknown): string[] | null {
+  if (!Array.isArray(options) || options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) return null;
+  const labels = options.map((o) => (typeof o === "string" ? o.trim() : ""));
+  if (labels.some((l) => l.length === 0)) return null;
+  return labels;
 }
 
 marketsRouter.get("/", async (req, res) => {
@@ -35,7 +49,7 @@ marketsRouter.get("/", async (req, res) => {
     where.category = category as MarketCategory;
   }
 
-  const markets = await prisma.market.findMany({ where, orderBy: { createdAt: "desc" } });
+  const markets = await prisma.market.findMany({ where, include: optionsOrder, orderBy: { createdAt: "desc" } });
   res.json({ markets: markets.map(serializeMarket) });
 });
 
@@ -104,7 +118,7 @@ marketsRouter.get("/stats/history", async (_req, res) => {
 });
 
 marketsRouter.get("/:id", async (req, res) => {
-  const market = await prisma.market.findUnique({ where: { id: req.params.id } });
+  const market = await prisma.market.findUnique({ where: { id: req.params.id }, include: optionsOrder });
   if (!market) {
     res.status(404).json({ error: "Market not found" });
     return;
@@ -113,11 +127,25 @@ marketsRouter.get("/:id", async (req, res) => {
 });
 
 marketsRouter.get("/:id/price-history", async (req, res) => {
-  const market = await prisma.market.findUnique({ where: { id: req.params.id } });
+  const market = await prisma.market.findUnique({ where: { id: req.params.id }, include: optionsOrder });
   if (!market) {
     res.status(404).json({ error: "Market not found" });
     return;
   }
+
+  if (market.type === "MULTI") {
+    const optionIds = market.options.map((o) => o.id);
+    const optionPricePoints = await prisma.optionPricePoint.findMany({
+      where: { optionId: { in: optionIds } },
+      orderBy: { timestamp: "asc" },
+    });
+    res.json({
+      options: market.options.map((o) => ({ id: o.id, label: o.label, sortOrder: o.sortOrder })),
+      optionPricePoints,
+    });
+    return;
+  }
+
   const pricePoints = await prisma.pricePoint.findMany({
     where: { marketId: market.id },
     orderBy: { timestamp: "asc" },
@@ -126,7 +154,8 @@ marketsRouter.get("/:id/price-history", async (req, res) => {
 });
 
 marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
-  const { title, description, yesDescription, noDescription, category, startDate, endDate } = req.body ?? {};
+  const { title, description, category, startDate, endDate } = req.body ?? {};
+  const type: MarketType = req.body?.type === "MULTI" ? "MULTI" : "BINARY";
 
   if (typeof title !== "string" || title.trim().length < 3) {
     res.status(400).json({ error: "Title must be at least 3 characters" });
@@ -134,14 +163,6 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
   }
   if (typeof description !== "string" || description.trim().length === 0) {
     res.status(400).json({ error: "Description is required" });
-    return;
-  }
-  if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
-    res.status(400).json({ error: "yesDescription is required" });
-    return;
-  }
-  if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
-    res.status(400).json({ error: "noDescription is required" });
     return;
   }
   if (typeof category !== "string" || !CATEGORIES.includes(category as MarketCategory)) {
@@ -160,21 +181,62 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  let optionLabels: string[] | null = null;
+  if (type === "MULTI") {
+    optionLabels = validateOptionLabels(req.body?.options);
+    if (!optionLabels) {
+      res.status(400).json({ error: `options must be an array of ${MIN_OPTIONS} to ${MAX_OPTIONS} non-empty labels` });
+      return;
+    }
+  } else {
+    const { yesDescription, noDescription } = req.body ?? {};
+    if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
+      res.status(400).json({ error: "yesDescription is required" });
+      return;
+    }
+    if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
+      res.status(400).json({ error: "noDescription is required" });
+      return;
+    }
+  }
+
   const market = await prisma.market.create({
-    data: {
-      title: title.trim(),
-      description,
-      yesDescription,
-      noDescription,
-      category: category as MarketCategory,
-      startDate: start,
-      endDate: end,
-      pricePoints: { create: { yesPrice: 0.5 } },
-    },
+    data:
+      type === "MULTI"
+        ? {
+            title: title.trim(),
+            description,
+            type,
+            category: category as MarketCategory,
+            startDate: start,
+            endDate: end,
+            options: { create: optionLabels!.map((label, i) => ({ label, sortOrder: i })) },
+          }
+        : {
+            title: title.trim(),
+            description,
+            yesDescription: req.body.yesDescription,
+            noDescription: req.body.noDescription,
+            category: category as MarketCategory,
+            startDate: start,
+            endDate: end,
+            pricePoints: { create: { yesPrice: 0.5 } },
+          },
+    include: optionsOrder,
   });
 
+  if (type === "MULTI") {
+    const seededAt = new Date();
+    await prisma.optionPricePoint.createMany({
+      data: market.options.map((o) => ({ optionId: o.id, price: 1 / market.options.length, timestamp: seededAt })),
+    });
+  }
+
   try {
-    const tx = await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
+    const tx =
+      type === "MULTI"
+        ? await runAsOwner((nonce) => getOwnerContract().createMultiMarket(market.id, market.options.length, { nonce }))
+        : await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
     await tx.wait();
   } catch (err) {
     console.error(`Could not create on-chain market ${market.id}:`, err);
@@ -187,7 +249,7 @@ marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
 });
 
 marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
-  const existing = await prisma.market.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.market.findUnique({ where: { id: req.params.id }, include: optionsOrder });
   if (!existing) {
     res.status(404).json({ error: "Market not found" });
     return;
@@ -197,7 +259,7 @@ marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
-  const { title, description, yesDescription, noDescription, category, startDate, endDate } = req.body ?? {};
+  const { title, description, yesDescription, noDescription, category, startDate, endDate, options } = req.body ?? {};
   const data: Record<string, unknown> = {};
 
   if (title !== undefined) {
@@ -214,19 +276,21 @@ marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     }
     data.description = description;
   }
-  if (yesDescription !== undefined) {
-    if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
-      res.status(400).json({ error: "yesDescription is required" });
-      return;
+  if (existing.type === "BINARY") {
+    if (yesDescription !== undefined) {
+      if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
+        res.status(400).json({ error: "yesDescription is required" });
+        return;
+      }
+      data.yesDescription = yesDescription;
     }
-    data.yesDescription = yesDescription;
-  }
-  if (noDescription !== undefined) {
-    if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
-      res.status(400).json({ error: "noDescription is required" });
-      return;
+    if (noDescription !== undefined) {
+      if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
+        res.status(400).json({ error: "noDescription is required" });
+        return;
+      }
+      data.noDescription = noDescription;
     }
-    data.noDescription = noDescription;
   }
   if (category !== undefined) {
     if (!CATEGORIES.includes(category as MarketCategory)) {
@@ -252,7 +316,31 @@ marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
     data.endDate = end;
   }
 
-  const market = await prisma.market.update({ where: { id: req.params.id }, data });
+  let newLabels: string[] | null = null;
+  if (existing.type === "MULTI" && options !== undefined) {
+    if (!Array.isArray(options) || options.length !== existing.options.length) {
+      res.status(400).json({ error: `options must be an array of exactly ${existing.options.length} labels` });
+      return;
+    }
+    newLabels = options.map((o) => (typeof o === "string" ? o.trim() : ""));
+    if (newLabels.some((l) => l.length === 0)) {
+      res.status(400).json({ error: "Option labels cannot be empty" });
+      return;
+    }
+  }
+
+  const market = await prisma.$transaction(async (dbTx) => {
+    if (Object.keys(data).length > 0) {
+      await dbTx.market.update({ where: { id: existing.id }, data });
+    }
+    if (newLabels) {
+      for (let i = 0; i < existing.options.length; i++) {
+        await dbTx.marketOption.update({ where: { id: existing.options[i].id }, data: { label: newLabels[i] } });
+      }
+    }
+    return dbTx.market.findUniqueOrThrow({ where: { id: existing.id }, include: optionsOrder });
+  });
+
   res.json({ market: serializeMarket(market) });
 });
 
@@ -279,16 +367,33 @@ marketsRouter.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) => {
-  const { outcome } = req.body ?? {};
-  if (outcome !== "YES" && outcome !== "NO") {
-    res.status(400).json({ error: "outcome must be YES or NO" });
-    return;
-  }
-
-  const existing = await prisma.market.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.market.findUnique({ where: { id: req.params.id }, include: optionsOrder });
   if (!existing) {
     res.status(404).json({ error: "Market not found" });
     return;
+  }
+
+  let outcome: "YES" | "NO" | undefined;
+  let winningOption: MarketOption | undefined;
+
+  if (existing.type === "MULTI") {
+    const { optionId } = req.body ?? {};
+    if (typeof optionId !== "string") {
+      res.status(400).json({ error: "optionId is required" });
+      return;
+    }
+    winningOption = existing.options.find((o) => o.id === optionId);
+    if (!winningOption) {
+      res.status(400).json({ error: "optionId does not belong to this market" });
+      return;
+    }
+  } else {
+    const { outcome: bodyOutcome } = req.body ?? {};
+    if (bodyOutcome !== "YES" && bodyOutcome !== "NO") {
+      res.status(400).json({ error: "outcome must be YES or NO" });
+      return;
+    }
+    outcome = bodyOutcome;
   }
 
   let resync = false;
@@ -298,9 +403,14 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
       res.status(400).json({ error: "Market is already resolved" });
       return;
     }
-    if (existing.resolvedOutcome !== outcome) {
+    const mismatch =
+      existing.type === "MULTI" ? existing.resolvedOptionId !== winningOption!.id : existing.resolvedOutcome !== outcome;
+    if (mismatch) {
       res.status(409).json({
-        error: `Market already resolved on-chain as ${existing.resolvedOutcome}; resend with that outcome to retry syncing payouts.`,
+        error:
+          existing.type === "MULTI"
+            ? "Market already resolved on-chain with a different option; resend with that option to retry syncing payouts."
+            : `Market already resolved on-chain as ${existing.resolvedOutcome}; resend with that outcome to retry syncing payouts.`,
       });
       return;
     }
@@ -315,7 +425,10 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
     if (!resync) {
       const claimed = await prisma.market.updateMany({
         where: { id: existing.id, status: "OPEN" },
-        data: { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
+        data:
+          existing.type === "MULTI"
+            ? { status: "RESOLVED", resolvedOptionId: winningOption!.id, resolvedAt: new Date() }
+            : { status: "RESOLVED", resolvedOutcome: outcome, resolvedAt: new Date() },
       });
       if (claimed.count === 0) {
         res.status(400).json({ error: "Market is already resolved" });
@@ -323,15 +436,21 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
       }
 
       try {
-        const tx = await runAsOwner((nonce) =>
-          getOwnerContract().resolveMarket(existing.id, sideToOutcome(outcome), { nonce }),
-        );
+        const tx =
+          existing.type === "MULTI"
+            ? await runAsOwner((nonce) =>
+                getOwnerContract().resolveMultiMarket(existing.id, winningOption!.sortOrder, { nonce }),
+              )
+            : await runAsOwner((nonce) => getOwnerContract().resolveMarket(existing.id, sideToOutcome(outcome!), { nonce }));
         await tx.wait();
       } catch (err) {
         console.error(`Could not resolve on-chain market ${existing.id}:`, err);
         await prisma.market.update({
           where: { id: existing.id },
-          data: { status: "OPEN", resolvedOutcome: null, resolvedAt: null },
+          data:
+            existing.type === "MULTI"
+              ? { status: "OPEN", resolvedOptionId: null, resolvedAt: null }
+              : { status: "OPEN", resolvedOutcome: null, resolvedAt: null },
         });
         res.status(502).json({ error: revertReason(err) ?? "Could not resolve the on-chain market" });
         return;
@@ -342,8 +461,9 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
     const readContract = getReadOnlyContract();
     const payouts = await Promise.all(
       bets.map(async (_, i) => {
-        const [, , , payoutUnits] = await readContract.getBet(existing.id, i);
-        return fromChainAmount(payoutUnits);
+        const result =
+          existing.type === "MULTI" ? await readContract.getMultiBet(existing.id, i) : await readContract.getBet(existing.id, i);
+        return fromChainAmount(result[3]);
       }),
     );
 
@@ -356,14 +476,14 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
     );
     const balances = new Map(balanceEntries);
 
-    const market = await prisma.$transaction(async (tx) => {
+    const market = await prisma.$transaction(async (dbTx) => {
       for (let i = 0; i < bets.length; i++) {
-        await tx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
+        await dbTx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
       }
       for (const [userId, walletBalance] of balances) {
-        await tx.user.update({ where: { id: userId }, data: { walletBalance } });
+        await dbTx.user.update({ where: { id: userId }, data: { walletBalance } });
       }
-      return tx.market.findUniqueOrThrow({ where: { id: existing.id } });
+      return dbTx.market.findUniqueOrThrow({ where: { id: existing.id }, include: optionsOrder });
     });
 
     res.json({ market: serializeMarket(market) });

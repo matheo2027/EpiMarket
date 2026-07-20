@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { CategoryBadge } from "@/components/category-badge";
 import { SplitBar } from "@/components/split-bar";
+import { OptionsBar } from "@/components/options-bar";
 import { PriceChart } from "@/components/price-chart";
+import { OptionsPriceChart } from "@/components/options-price-chart";
 import { BetForm } from "@/components/bet-form";
-import type { Market, PricePoint } from "@/lib/types";
+import type { Market, MarketOption, OptionPricePoint, PricePoint } from "@/lib/types";
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("fr-FR", {
@@ -30,9 +32,20 @@ async function getMarket(id: string): Promise<Market | null> {
   }
 }
 
-async function getPriceHistory(id: string): Promise<PricePoint[]> {
+type PriceHistory =
+  | { kind: "binary"; pricePoints: PricePoint[] }
+  | { kind: "multi"; options: Pick<MarketOption, "id" | "label" | "sortOrder">[]; optionPricePoints: OptionPricePoint[] };
+
+async function getPriceHistory(id: string, type: Market["type"]): Promise<PriceHistory> {
+  if (type === "MULTI") {
+    const data = await apiFetch<{
+      options: Pick<MarketOption, "id" | "label" | "sortOrder">[];
+      optionPricePoints: OptionPricePoint[];
+    }>(`/markets/${id}/price-history`);
+    return { kind: "multi", ...data };
+  }
   const data = await apiFetch<{ pricePoints: PricePoint[] }>(`/markets/${id}/price-history`);
-  return data.pricePoints;
+  return { kind: "binary", pricePoints: data.pricePoints };
 }
 
 export default async function MarketDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +53,7 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
   const market = await getMarket(id);
   if (!market) notFound();
 
-  const pricePoints = await getPriceHistory(id);
+  const priceHistory = await getPriceHistory(id, market.type);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -53,9 +66,14 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
           <div>
             <div className="flex items-center gap-3">
               <CategoryBadge category={market.category} />
-              {market.status === "RESOLVED" && (
+              {market.status === "RESOLVED" && market.type === "BINARY" && (
                 <span className="font-mono text-xs uppercase tracking-wide text-muted">
                   Résolu : {market.resolvedOutcome === "YES" ? "OUI" : "NON"}
+                </span>
+              )}
+              {market.status === "RESOLVED" && market.type === "MULTI" && (
+                <span className="font-mono text-xs uppercase tracking-wide text-muted">
+                  Résolu : {market.options?.find((o) => o.id === market.resolvedOptionId)?.label ?? "—"}
                 </span>
               )}
             </div>
@@ -65,20 +83,32 @@ export default async function MarketDetailPage({ params }: { params: Promise<{ i
             <p className="mt-4 max-w-2xl text-muted">{market.description}</p>
           </div>
 
-          <SplitBar yesPrice={market.yesPrice} size="lg" />
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-yes/30 bg-yes-soft p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-yes">Compte comme OUI</p>
-              <p className="mt-2 text-sm text-paper">{market.yesDescription}</p>
+          {market.type === "MULTI" ? (
+            <div className="rounded-2xl border border-line bg-surface p-5">
+              <OptionsBar options={market.options ?? []} resolvedOptionId={market.resolvedOptionId} />
             </div>
-            <div className="rounded-2xl border border-no/30 bg-no-soft p-4">
-              <p className="font-mono text-xs uppercase tracking-wide text-no">Compte comme NON</p>
-              <p className="mt-2 text-sm text-paper">{market.noDescription}</p>
-            </div>
-          </div>
+          ) : (
+            <>
+              <SplitBar yesPrice={market.yesPrice} size="lg" />
 
-          <PriceChart pricePoints={pricePoints} />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-yes/30 bg-yes-soft p-4">
+                  <p className="font-mono text-xs uppercase tracking-wide text-yes">Compte comme OUI</p>
+                  <p className="mt-2 text-sm text-paper">{market.yesDescription}</p>
+                </div>
+                <div className="rounded-2xl border border-no/30 bg-no-soft p-4">
+                  <p className="font-mono text-xs uppercase tracking-wide text-no">Compte comme NON</p>
+                  <p className="mt-2 text-sm text-paper">{market.noDescription}</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {priceHistory.kind === "multi" ? (
+            <OptionsPriceChart options={priceHistory.options} optionPricePoints={priceHistory.optionPricePoints} />
+          ) : (
+            <PriceChart pricePoints={priceHistory.pricePoints} />
+          )}
 
           <div className="grid grid-cols-2 gap-4 border-t border-line pt-6 font-mono text-sm sm:grid-cols-4">
             <div>
