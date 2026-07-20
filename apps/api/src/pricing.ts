@@ -8,3 +8,12 @@ export function computePrices(pools: { yesPool: unknown; noPool: unknown }) {
     noPrice: Number((1 - yesPrice).toFixed(4)),
   };
 }
+
+export function computeOptionPrices<T extends { pool: unknown }>(options: T[]): (T & { price: number })[] {
+  const pools = options.map((o) => Number(o.pool));
+  const total = pools.reduce((sum, p) => sum + p, 0);
+  return options.map((option, i) => ({
+    ...option,
+    price: Number((total > 0 ? pools[i] / total : 1 / options.length).toFixed(4)),
+  }));
+}

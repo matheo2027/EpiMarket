@@ -18,6 +18,7 @@ export default function AdminMarketsPage() {
   const [markets, setMarkets] = useState<Market[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resolveSelection, setResolveSelection] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     apiFetch<{ markets: Market[] }>("/markets")
@@ -41,6 +42,29 @@ export default function AdminMarketsPage() {
     setError(null);
     try {
       await apiFetch(`/markets/${market.id}/resolve`, { method: "POST", token, body: { outcome } });
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleResolveOption(market: Market) {
+    const optionId = resolveSelection[market.id] ?? market.options?.[0]?.id;
+    if (!optionId) return;
+    const label = market.options?.find((o) => o.id === optionId)?.label ?? "";
+    const ok = await confirm({
+      title: "Conclure le marché",
+      message: `Conclure « ${market.title} » sur « ${label} » ? Cette action règle immédiatement les gains et est irréversible.`,
+      confirmLabel: "Conclure",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyId(market.id);
+    setError(null);
+    try {
+      await apiFetch(`/markets/${market.id}/resolve`, { method: "POST", token, body: { optionId } });
       load();
     } catch (err) {
       setError(errorMessage(err));
@@ -93,13 +117,18 @@ export default function AdminMarketsPage() {
                   <span className="font-mono text-xs text-muted">
                     {market.status === "OPEN"
                       ? "Ouvert"
-                      : `Résolu · ${market.resolvedOutcome === "YES" ? "OUI" : "NON"}`}
+                      : market.type === "MULTI"
+                        ? `Résolu · ${market.options?.find((o) => o.id === market.resolvedOptionId)?.label ?? "—"}`
+                        : `Résolu · ${market.resolvedOutcome === "YES" ? "OUI" : "NON"}`}
                   </span>
                 </div>
                 <p className="text-sm font-medium text-paper">{market.title}</p>
                 <p className="font-mono text-xs text-muted">
-                  OUI {Math.round(market.yesPrice * 100)}% · Volume{" "}
-                  {Number(market.totalVolume).toLocaleString("fr-FR")} € · Clôture {formatDate(market.endDate)}
+                  {market.type === "MULTI"
+                    ? `${market.options?.length ?? 0} options`
+                    : `OUI ${Math.round(market.yesPrice * 100)}%`}{" "}
+                  · Volume {Number(market.totalVolume).toLocaleString("fr-FR")} € · Clôture{" "}
+                  {formatDate(market.endDate)}
                 </p>
               </div>
 
@@ -110,7 +139,29 @@ export default function AdminMarketsPage() {
                 >
                   Éditer
                 </Link>
-                {market.status === "OPEN" && (
+                {market.status === "OPEN" && market.type === "MULTI" && (
+                  <>
+                    <select
+                      value={resolveSelection[market.id] ?? market.options?.[0]?.id ?? ""}
+                      onChange={(e) => setResolveSelection((s) => ({ ...s, [market.id]: e.target.value }))}
+                      className="rounded-full border border-line bg-ink px-3 py-1.5 text-xs text-paper outline-none focus-visible:border-brand"
+                    >
+                      {market.options?.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={busyId === market.id}
+                      onClick={() => handleResolveOption(market)}
+                      className="rounded-full border border-brand/40 px-3.5 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-brand-soft disabled:opacity-50"
+                    >
+                      Conclure
+                    </button>
+                  </>
+                )}
+                {market.status === "OPEN" && market.type === "BINARY" && (
                   <>
                     <button
                       disabled={busyId === market.id}

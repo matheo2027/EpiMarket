@@ -11,6 +11,7 @@ import { computeBetStats } from "@/lib/bet-stats";
 import { ProfileStats } from "@/components/profile-stats";
 import { PnlChart } from "@/components/pnl-chart";
 import { CategoryBreakdown } from "@/components/category-breakdown";
+import { optionTone } from "@/lib/option-tones";
 
 type Tab = "ongoing" | "past";
 
@@ -26,8 +27,10 @@ function tabClass(active: boolean) {
 
 function BetRow({ bet }: { bet: Bet }) {
   const market = bet.market;
-  const sideColor = bet.side === "YES" ? "text-yes" : "text-no";
   const payout = bet.payout !== null ? Number(bet.payout) : null;
+  const isMulti = bet.side === null;
+  const sideColor = isMulti ? optionTone(bet.option?.sortOrder ?? 0).text : bet.side === "YES" ? "text-yes" : "text-no";
+  const sideLabel = isMulti ? (bet.option?.label ?? "—") : bet.side === "YES" ? "OUI" : "NON";
 
   return (
     <Link
@@ -37,9 +40,7 @@ function BetRow({ bet }: { bet: Bet }) {
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           {market && <CategoryBadge category={market.category} />}
-          <span className={`font-mono text-xs font-semibold ${sideColor}`}>
-            {bet.side === "YES" ? "OUI" : "NON"}
-          </span>
+          <span className={`font-mono text-xs font-semibold ${sideColor}`}>{sideLabel}</span>
         </div>
         <p className="text-sm text-paper">{market?.title ?? "Marché"}</p>
         <p className="font-mono text-xs text-muted">{formatDate(bet.createdAt)}</p>

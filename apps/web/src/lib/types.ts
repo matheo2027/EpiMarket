@@ -11,7 +11,18 @@ export type MarketCategory =
 
 export type MarketStatus = "OPEN" | "RESOLVED";
 
+export type MarketType = "BINARY" | "MULTI";
+
 export type BetSide = "YES" | "NO";
+
+export type MarketOption = {
+  id: string;
+  label: string;
+  sortOrder: number;
+  pool: string;
+  marketId: string;
+  price: number;
+};
 
 export type User = {
   id: string;
@@ -27,11 +38,13 @@ export type Market = {
   id: string;
   title: string;
   description: string;
-  yesDescription: string;
-  noDescription: string;
+  type: MarketType;
+  yesDescription: string | null;
+  noDescription: string | null;
   category: MarketCategory;
   status: MarketStatus;
   resolvedOutcome: BetSide | null;
+  resolvedOptionId: string | null;
   startDate: string;
   endDate: string;
   yesPool: string;
@@ -41,11 +54,12 @@ export type Market = {
   resolvedAt: string | null;
   yesPrice: number;
   noPrice: number;
+  options?: MarketOption[];
 };
 
 export type Bet = {
   id: string;
-  side: BetSide;
+  side: BetSide | null;
   amount: string;
   price: string;
   payout: string | null;
@@ -53,7 +67,9 @@ export type Bet = {
   createdAt: string;
   userId: string;
   marketId: string;
+  optionId: string | null;
   market?: Market;
+  option?: MarketOption | null;
   user?: User;
 };
 
@@ -79,7 +95,7 @@ export type Ticket = {
 export type UnsyncedMarket = { id: string; title: string };
 
 export type StuckBet = Bet & {
-  market: Pick<Market, "id" | "title" | "resolvedOutcome">;
+  market: Pick<Market, "id" | "title" | "type" | "resolvedOutcome" | "resolvedOptionId">;
   user: Pick<User, "id" | "username">;
 };
 
@@ -119,6 +135,13 @@ export type PricePoint = {
   yesPrice: string;
   timestamp: string;
   marketId: string;
+};
+
+export type OptionPricePoint = {
+  id: string;
+  price: string;
+  timestamp: string;
+  optionId: string;
 };
 
 export const CATEGORY_LABELS: Record<MarketCategory, string> = {

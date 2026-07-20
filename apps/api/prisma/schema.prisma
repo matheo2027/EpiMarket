@@ -27,6 +27,11 @@ enum MarketStatus {
   RESOLVED
 }
 
+enum MarketType {
+  BINARY
+  MULTI
+}
+
 enum BetSide {
   YES
   NO
@@ -58,8 +63,9 @@ model Market {
   id              String         @id @default(cuid())
   title           String
   description     String
-  yesDescription  String
-  noDescription   String
+  type            MarketType     @default(BINARY)
+  yesDescription  String?
+  noDescription   String?
   category        MarketCategory
   status          MarketStatus   @default(OPEN)
   resolvedOutcome BetSide?
@@ -73,14 +79,34 @@ model Market {
   createdAt  DateTime @default(now())
   resolvedAt DateTime?
 
+  resolvedOptionId String?
+  resolvedOption   MarketOption? @relation("ResolvedOption", fields: [resolvedOptionId], references: [id])
+
   bets        Bet[]
   pricePoints PricePoint[]
+  options     MarketOption[]
   tickets     Ticket[]
+}
+
+model MarketOption {
+  id        String @id @default(cuid())
+  label     String
+  sortOrder Int
+  pool      Decimal @default(50) @db.Decimal(18, 2)
+
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  bets            Bet[]
+  pricePoints     OptionPricePoint[]
+  resolvedInMarkets Market[] @relation("ResolvedOption")
+
+  @@index([marketId])
 }
 
 model Bet {
   id        String   @id @default(cuid())
-  side      BetSide
+  side      BetSide?
   amount    Decimal  @db.Decimal(18, 2)
   price     Decimal  @db.Decimal(5, 4)
   payout    Decimal? @db.Decimal(18, 2)
@@ -93,10 +119,14 @@ model Bet {
   marketId String
   market   Market @relation(fields: [marketId], references: [id])
 
+  optionId String?
+  option   MarketOption? @relation(fields: [optionId], references: [id])
+
   tickets Ticket[]
 
   @@index([userId])
   @@index([marketId])
+  @@index([optionId])
 }
 
 model PricePoint {
@@ -108,6 +138,17 @@ model PricePoint {
   market   Market @relation(fields: [marketId], references: [id])
 
   @@index([marketId, timestamp])
+}
+
+model OptionPricePoint {
+  id        String   @id @default(cuid())
+  price     Decimal  @db.Decimal(5, 4)
+  timestamp DateTime @default(now())
+
+  optionId String
+  option   MarketOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([optionId, timestamp])
 }
 
 model Ticket {

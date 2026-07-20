@@ -185,7 +185,10 @@ export default function AdminDiagnosticsPage() {
                     apiFetch(`/markets/${bet.market.id}/resolve`, {
                       method: "POST",
                       token,
-                      body: { outcome: bet.market.resolvedOutcome },
+                      body:
+                        bet.market.type === "MULTI"
+                          ? { optionId: bet.market.resolvedOptionId }
+                          : { outcome: bet.market.resolvedOutcome },
                     }),
                 )
               }

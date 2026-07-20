@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { truncateHash } from "@/lib/format";
+import { optionTone } from "@/lib/option-tones";
 import type { Bet } from "@/lib/types";
 
 function formatDate(d: string) {
@@ -34,7 +35,13 @@ export default function AdminBetsPage() {
 
       <div className="flex flex-col gap-3">
         {bets?.map((bet) => {
-          const sideColor = bet.side === "YES" ? "text-yes" : "text-no";
+          const isMulti = bet.side === null;
+          const sideColor = isMulti
+            ? optionTone(bet.option?.sortOrder ?? 0).text
+            : bet.side === "YES"
+              ? "text-yes"
+              : "text-no";
+          const sideLabel = isMulti ? (bet.option?.label ?? "—") : bet.side === "YES" ? "OUI" : "NON";
           const payout = bet.payout !== null ? Number(bet.payout) : null;
 
           return (
@@ -44,9 +51,7 @@ export default function AdminBetsPage() {
             >
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className={`font-mono text-xs font-semibold ${sideColor}`}>
-                    {bet.side === "YES" ? "OUI" : "NON"}
-                  </span>
+                  <span className={`font-mono text-xs font-semibold ${sideColor}`}>{sideLabel}</span>
                   <span className="text-xs text-muted">{bet.user?.username ?? bet.userId}</span>
                 </div>
                 <p className="text-sm text-paper">{bet.market?.title ?? "Marché"}</p>

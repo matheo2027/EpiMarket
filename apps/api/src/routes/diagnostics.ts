@@ -24,14 +24,23 @@ diagnosticsRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
     const openMarkets = await prisma.market.findMany({ where: { status: "OPEN" } });
     const unsyncedMarkets = [];
     for (const market of openMarkets) {
-      const onChain = await readContract.markets(market.id);
-      const exists = onChain.exists ?? onChain[5];
-      if (!exists) unsyncedMarkets.push({ id: market.id, title: market.title });
+      if (market.type === "MULTI") {
+        const onChain = await readContract.getMultiMarket(market.id);
+        const exists = onChain.exists ?? onChain[4];
+        if (!exists) unsyncedMarkets.push({ id: market.id, title: market.title });
+      } else {
+        const onChain = await readContract.markets(market.id);
+        const exists = onChain.exists ?? onChain[5];
+        if (!exists) unsyncedMarkets.push({ id: market.id, title: market.title });
+      }
     }
 
     const stuckBets = await prisma.bet.findMany({
       where: { market: { status: "RESOLVED" }, payout: null },
-      include: { market: { select: { id: true, title: true, resolvedOutcome: true } }, user: { select: { id: true, username: true } } },
+      include: {
+        market: { select: { id: true, title: true, type: true, resolvedOutcome: true, resolvedOptionId: true } },
+        user: { select: { id: true, username: true } },
+      },
       orderBy: { createdAt: "asc" },
     });
 
@@ -59,7 +68,10 @@ diagnosticsRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
 });
 
 diagnosticsRouter.post("/resync-market/:id", requireAuth, requireAdmin, async (req, res) => {
-  const market = await prisma.market.findUnique({ where: { id: req.params.id } });
+  const market = await prisma.market.findUnique({
+    where: { id: req.params.id },
+    include: { options: { orderBy: { sortOrder: "asc" } } },
+  });
   if (!market) {
     res.status(404).json({ error: "Market not found" });
     return;
@@ -67,6 +79,22 @@ diagnosticsRouter.post("/resync-market/:id", requireAuth, requireAdmin, async (r
 
   try {
     const readContract = getReadOnlyContract();
+
+    if (market.type === "MULTI") {
+      const onChain = await readContract.getMultiMarket(market.id);
+      const exists = onChain.exists ?? onChain[4];
+      if (exists) {
+        res.status(400).json({ error: "Market already exists on-chain" });
+        return;
+      }
+      const tx = await runAsOwner((nonce) =>
+        getOwnerContract().createMultiMarket(market.id, market.options.length, { nonce }),
+      );
+      await tx.wait();
+      res.json({ ok: true });
+      return;
+    }
+
     const onChain = await readContract.markets(market.id);
     const exists = onChain.exists ?? onChain[5];
     if (exists) {

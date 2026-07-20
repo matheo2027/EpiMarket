@@ -21,6 +21,8 @@
   --glow: rgba(79, 140, 255, 0.4);
   --series-3: #d55181;
   --series-4: #c98500;
+  --series-5: #199e70;
+  --series-6: #d95926;
   --orb-1: #4f8cff;
   --orb-2: #8b5cf6;
   --orb-opacity: 0.32;
@@ -43,6 +45,8 @@
   --glow: rgba(47, 111, 237, 0.28);
   --series-3: #e87ba4;
   --series-4: #eda100;
+  --series-5: #1baf7a;
+  --series-6: #eb6834;
   --orb-1: #2f6fed;
   --orb-2: #8b5cf6;
   --orb-opacity: 0.14;
@@ -63,6 +67,8 @@
   --color-brand-soft: var(--brand-soft);
   --color-series-3: var(--series-3);
   --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
+  --color-series-6: var(--series-6);
   --font-display: var(--font-geist);
   --font-sans: var(--font-geist);
   --font-mono: var(--font-geist-mono);

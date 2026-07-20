@@ -29,17 +29,17 @@ export function UserGuideContent() {
       </Section>
 
       <Section title="Parcourir les marchés et comprendre un marché">
-        <p>Filtrez par statut (Ouverts/Résolus) et catégorie. Sur la page d&apos;un marché :</p>
+        <p>Filtrez par statut (Ouverts/Résolus) et catégorie. Il existe deux types de marché :</p>
         <ul className="list-disc pl-4">
-          <li>Ce qui compte comme <strong>&quot;oui&quot;</strong> et comme <strong>&quot;non&quot;</strong> — lisez-le avant de parier, c&apos;est ce qui décide qui gagne.</li>
-          <li>La barre de répartition OUI/NON : la cote actuelle, mise à jour à chaque pari.</li>
-          <li>Le graphe d&apos;évolution du prix dans le temps.</li>
+          <li><strong>OUI/NON</strong> : ce qui compte comme &quot;oui&quot; et comme &quot;non&quot; est écrit sur la page — lisez-le avant de parier, c&apos;est ce qui décide qui gagne. La cote actuelle s&apos;affiche en barre de répartition.</li>
+          <li><strong>Options multiples</strong> (ex. &quot;qui remporte le tournoi ?&quot;) : une ligne par option avec son pourcentage. Un seul camp peut gagner.</li>
+          <li>Dans les deux cas, un graphe d&apos;évolution du prix montre comment la cote a bougé dans le temps.</li>
         </ul>
       </Section>
 
       <Section title="Placer un pari">
         <p>
-          Choisissez votre camp, un montant, et un <strong>gain estimé</strong>{" "}
+          Choisissez votre camp (ou votre option), un montant, et un <strong>gain estimé</strong>{" "}
           s&apos;affiche avant de valider. Ce n&apos;est pas garanti : d&apos;autres personnes peuvent encore parier avant la
           clôture. Le pari n&apos;est possible que sur un marché ouvert, dans sa période active, et avec un
           solde suffisant.
@@ -87,9 +87,10 @@ export function AdminGuideContent() {
 
       <Section title="Marchés">
         <ul className="list-disc pl-4">
-          <li><strong>+ Nouveau marché</strong> : titre, description, règles du &quot;oui&quot;/&quot;non&quot;, catégorie, dates.</li>
+          <li><strong>+ Nouveau marché</strong> : titre, description, catégorie, dates, et soit les règles du &quot;oui&quot;/&quot;non&quot;, soit une liste de 3 à 6 options (une option &quot;Autre&quot; est pré-remplie en dernière position, supprimable).</li>
+          <li>Le type et le nombre d&apos;options sont fixés à la création (blockchain) ; les libellés restent modifiables ensuite.</li>
           <li><strong>Éditer</strong> : impossible une fois le marché résolu.</li>
-          <li><strong>Conclure OUI/NON</strong> : règle les gains immédiatement — action irréversible, confirmation demandée.</li>
+          <li><strong>Conclure</strong> : OUI/NON, ou l&apos;option gagnante — règle les gains immédiatement, action irréversible, confirmation demandée.</li>
           <li><strong>Supprimer</strong> : possible seulement sans pari et non résolu.</li>
         </ul>
       </Section>

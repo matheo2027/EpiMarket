@@ -30,15 +30,40 @@ Fonctions principales :
   recopier telle quelle plutôt que de le recalculer.
 - Events `Transfer`, `BetPlaced`, `MarketResolved` pour la traçabilité.
 
+### Marchés à options multiples
+
+Fonctions jumelles pour les marchés à plus de deux issues (ex. "qui remporte le tournoi ?"), ajoutées
+sans toucher aux fonctions ci-dessus : un marché OUI/NON reste géré par `markets`/`placeBet`/
+`resolveMarket`, un marché à options multiples par `multiMarkets`/`placeMultiBet`/`resolveMultiMarket`
+— même contrat, même adresse déployée, deux jeux de fonctions parallèles.
+
+- `createMultiMarket(marketId, optionCount)` — réservé au owner, `optionCount` entre 3 et 6
+  (`MIN_OUTCOMES`/`MAX_OUTCOMES`), initialise un pool de liquidité virtuelle (50) par option.
+- `placeMultiBet(marketId, optionIndex, amount)` — même logique que `placeBet`, mais mise sur une
+  option (son index) parmi N plutôt que sur OUI/NON.
+- `resolveMultiMarket(marketId, winningOption)` — même règlement pari-mutuel que `resolveMarket`,
+  généralisé à N pools : le pot réellement misé (toutes options confondues) est reversé aux parieurs de
+  l'option gagnante, proportionnellement à leur mise.
+- `getMultiMarket(marketId)` — vue explicite (pools, volume, statut, option gagnante) : contrairement à
+  `markets`, `multiMarkets` est une mapping privée car un getter public auto-généré ne peut pas exposer
+  un tableau dynamique (`uint256[] pools`) dans un struct.
+- `getMultiBetCount`/`getMultiBet` — équivalents de `getBetCount`/`getBet` pour l'historique des paris
+  à options multiples.
+
+C'est une généralisation directe du modèle binaire (courses hippiques à N chevaux plutôt qu'à 2), pas
+une redirection sur des OpenZeppelin/librairies de marché prédictif : le choix a été fait pour rester
+dans le même style "explicable à la lecture" que le reste du contrat, plutôt que de reproduire le vrai
+mécanisme de Polymarket (N mini-marchés OUI/NON indépendants par option), nettement plus complexe.
+
 ## Tests
 
 ```bash
 npx hardhat test
 ```
 
-22 tests couvrant : mint, transferts/allowances ERC-20, création de marché, pari (nominal et cas
-d'erreur : solde insuffisant, montant nul, marché inconnu ou déjà résolu), résolution (répartition
-proportionnelle, gestion du reliquat d'arrondi, remboursement si personne n'a gagné, appel non-owner).
+34 tests couvrant : mint, transferts/allowances ERC-20, marchés OUI/NON (création, pari, résolution —
+répartition proportionnelle, reliquat d'arrondi, remboursement si personne n'a gagné, appel non-owner),
+et l'équivalent pour les marchés à options multiples.
 
 ## Déploiement
 
