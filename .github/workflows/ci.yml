@@ -94,6 +94,7 @@ jobs:
         working-directory: apps/api
         run: |
           cat > .env.test <<'EOF'
+          NODE_ENV=test
           DATABASE_URL="postgresql://polymarket:polymarket@localhost:5432/polymarket_test"
           PORT=4001
           JWT_SECRET="ci-test-secret-not-sensitive"

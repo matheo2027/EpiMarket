@@ -15,7 +15,8 @@ export function UserGuideContent() {
       <Section title="Créer un compte et se connecter">
         <p>
           Un compte démarre automatiquement avec <strong>1000 € de portefeuille virtuel</strong>{" "}
-          — aucun argent réel n&apos;est impliqué.
+          — aucun argent réel n&apos;est impliqué. Mot de passe oublié ? Le lien sur la page de connexion
+          génère un lien de réinitialisation affiché directement (pas de vrai email envoyé).
         </p>
       </Section>
 

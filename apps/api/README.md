@@ -37,10 +37,10 @@ risque de toucher aux données de dev. Chaque fichier réinitialise les tables a
 résolution de marché) passent par le même compte owner/funder — les paralléliser ferait collisionner le
 nonce entre workers.
 
-Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`), marchés
-(création admin-only, recherche/tri, cycle complet pari→résolution→payout en BINARY et en MULTI, fenêtre
-de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions de lecture), favoris,
-commentaires, classement. Pas exhaustif (pas de couverture tickets/diagnostics/admin utilisateurs pour
+Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`, réinitialisation
+de mot de passe), marchés (création admin-only, recherche/tri, cycle complet pari→résolution→payout en
+BINARY et en MULTI, fenêtre de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions
+de lecture), favoris, commentaires, classement. Pas exhaustif (pas de couverture tickets/diagnostics/admin utilisateurs pour
 l'instant) — un premier passage, à étendre au fil de l'eau.
 
 ## Schéma
@@ -59,6 +59,8 @@ Compte utilisateur + portefeuille virtuel.
 | `walletBalance`  | `Decimal`  | miroir du solde on-chain réel (0 par défaut, mis à jour après chaque mint/pari/résolution — voir `syncUserBalance`, section Intégration blockchain plus bas) |
 | `walletAddress`  | `String?`  | adresse du wallet custodial on-chain, en clair. Nullable : lignes existantes avant l'ajout du POC blockchain, et surtout tout compte `ADMIN` (jamais provisionné, voir plus bas) |
 | `encryptedPrivateKey` | `String?` | clé privée du wallet, chiffrée au repos (AES-256-GCM, voir `src/blockchain/wallet.ts`). Jamais renvoyée par l'API |
+| `resetTokenHash` | `String?` | SHA-256 du token de réinitialisation de mot de passe en cours, `null` sinon (voir `POST /auth/forgot-password` plus bas) |
+| `resetTokenExpiresAt` | `DateTime?` | expiration du token ci-dessus (1h) |
 | `createdAt`      | `DateTime` |                                         |
 
 Relation : un `User` a plusieurs `Bet`.
@@ -163,7 +165,17 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 ## Routes
 
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
-  tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force.
+  tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force (désactivé quand
+  `NODE_ENV=test`, sinon la suite d'intégration elle-même déclenche la limite).
+- `POST /auth/forgot-password` — `{ email }`. Pas d'infra email dans ce POC : au lieu d'envoyer un
+  vrai email, génère un token aléatoire (32 octets), stocke son hash SHA-256 + une expiration (1h) sur
+  l'utilisateur, et **renvoie le token brut directement dans la réponse** (`{ resetToken }`) — le
+  frontend l'affiche comme un lien cliquable. `404` si l'email n'existe pas (pas de dissimulation
+  d'existence de compte puisque le flux n'est de toute façon pas email-based). Même rate limit que
+  `register`/`login`.
+- `POST /auth/reset-password` — `{ token, newPassword }`. Hash le token reçu et cherche une
+  correspondance non expirée ; `400` si invalide/expiré. Met à jour `passwordHash` et efface le token
+  (usage unique — un second appel avec le même token échoue).
 - `GET /markets`, `GET /markets/:id` — public. Renvoie `options` (avec le prix courant de chacune) pour
   un marché `MULTI`.
 - `GET /markets/:id/price-history` — public. Pour un marché `BINARY`, liste des `PricePoint` triés par

@@ -46,7 +46,12 @@ export default function ConnexionPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Mot de passe</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted">Mot de passe</span>
+            <Link href="/mot-de-passe-oublie" className="text-xs text-brand hover:underline">
+              Mot de passe oublié ?
+            </Link>
+          </div>
           <input
             type="password"
             required

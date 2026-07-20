@@ -27,6 +27,8 @@ src/app/
   classement/page.tsx          classement public des meilleurs parieurs (gain net réalisé), Server
                                 Component comme marches/page.tsx — pas besoin d'être connecté
   connexion/, inscription/     auth
+  mot-de-passe-oublie/,        réinitialisation de mot de passe — pas d'infra email dans ce POC, le lien
+  reinitialiser-mot-de-passe/  de reset est affiché directement au lieu d'être envoyé par email
   portefeuille/page.tsx        page "Profil" : solde, wallet on-chain, stats (taux de réussite, P&L,
                                 répartition par catégorie, courbe de gains/pertes), historique des paris
   support/page.tsx             signaler un problème (ticket) + suivi de ses propres tickets

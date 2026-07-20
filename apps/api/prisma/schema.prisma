@@ -55,6 +55,9 @@ model User {
   walletAddress       String? @unique
   encryptedPrivateKey String?
 
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
+
   bets      Bet[]
   tickets   Ticket[]
   favorites Favorite[]

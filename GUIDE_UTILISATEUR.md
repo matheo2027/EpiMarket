@@ -24,6 +24,8 @@ Cliquez sur **Créer un compte** en haut à droite. Il faut un email, un nom d'u
 
 Une fois inscrit, vous êtes connecté automatiquement. Pour vous reconnecter plus tard, utilisez **Connexion** avec le même email et mot de passe (l'email n'est pas sensible à la casse : `Bob@Exemple.com` et `bob@exemple.com` sont le même compte).
 
+Mot de passe oublié ? Le lien **Mot de passe oublié ?** sur la page de connexion mène à un formulaire où entrer votre email génère un lien de réinitialisation. Ce projet n'envoie pas de vrais emails : le lien s'affiche directement sur la page au lieu d'être envoyé — cliquez dessus pour choisir un nouveau mot de passe. Il expire au bout d'une heure et ne peut servir qu'une fois.
+
 Le bouton **Déconnexion** dans le header met fin à la session sur cet appareil.
 
 ---
