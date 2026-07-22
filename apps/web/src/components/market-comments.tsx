@@ -4,24 +4,27 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
+import { localeFor } from "@/lib/i18n";
 import type { Comment } from "@/lib/types";
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function MarketComments({ marketId, initialComments }: { marketId: string; initialComments: Comment[] }) {
   const { user, token } = useAuth();
+  const { language, t } = useLanguage();
   const [comments, setComments] = useState(initialComments);
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function formatDate(d: string) {
+    return new Date(d).toLocaleDateString(localeFor(language), {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -37,7 +40,7 @@ export function MarketComments({ marketId, initialComments }: { marketId: string
       setComments((prev) => [data.comment, ...prev]);
       setContent("");
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -49,14 +52,14 @@ export function MarketComments({ marketId, initialComments }: { marketId: string
       await apiFetch(`/markets/${marketId}/comments/${commentId}`, { method: "DELETE", token });
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     }
   }
 
   return (
     <div className="border-t border-line pt-6">
       <h2 className="font-display text-lg font-semibold tracking-tight">
-        Commentaires <span className="font-mono text-sm font-normal text-muted">({comments.length})</span>
+        {t("comments.title")} <span className="font-mono text-sm font-normal text-muted">({comments.length})</span>
       </h2>
 
       {user ? (
@@ -67,7 +70,7 @@ export function MarketComments({ marketId, initialComments }: { marketId: string
             maxLength={1000}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Votre avis sur ce marché…"
+            placeholder={t("comments.placeholder")}
             className="rounded-lg border border-line bg-ink px-3.5 py-2.5 text-sm text-paper outline-none focus-visible:border-brand"
           />
           <button
@@ -75,22 +78,22 @@ export function MarketComments({ marketId, initialComments }: { marketId: string
             disabled={submitting}
             className="self-start rounded-full bg-paper px-4 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
           >
-            {submitting ? "Envoi…" : "Publier"}
+            {submitting ? t("comments.sending") : t("comments.publish")}
           </button>
         </form>
       ) : (
         <p className="mt-4 text-sm text-muted">
           <Link href="/connexion" className="text-brand hover:underline">
-            Connectez-vous
-          </Link>{" "}
-          pour commenter.
+            {t("comments.loginPrompt")}
+          </Link>
+          {t("comments.loginSuffix")}
         </p>
       )}
 
       {error && <p className="mt-2 text-sm text-no">{error}</p>}
 
       <div className="mt-6 flex flex-col gap-3">
-        {comments.length === 0 && <p className="text-sm text-muted">Aucun commentaire pour l&apos;instant.</p>}
+        {comments.length === 0 && <p className="text-sm text-muted">{t("comments.noComments")}</p>}
         {comments.map((comment) => (
           <div key={comment.id} className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center justify-between gap-2">
@@ -103,7 +106,7 @@ export function MarketComments({ marketId, initialComments }: { marketId: string
                     onClick={() => handleDelete(comment.id)}
                     className="text-xs text-muted transition-colors hover:text-no"
                   >
-                    Supprimer
+                    {t("comments.delete")}
                   </button>
                 )}
               </div>

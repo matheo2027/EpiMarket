@@ -1,5 +1,8 @@
+"use client";
+
 import type { CategoryStat } from "@/lib/bet-stats";
 import { CategoryBadge } from "@/components/category-badge";
+import { useLanguage } from "@/lib/language-context";
 
 function eur(n: number): string {
   const sign = n > 0 ? "+" : "";
@@ -7,8 +10,10 @@ function eur(n: number): string {
 }
 
 export function CategoryBreakdown({ breakdown }: { breakdown: CategoryStat[] }) {
+  const { t, tp } = useLanguage();
+
   if (breakdown.length === 0) {
-    return <p className="text-sm text-muted">Aucun pari résolu pour le moment.</p>;
+    return <p className="text-sm text-muted">{t("profile.noResolvedBets")}</p>;
   }
 
   const maxAbs = Math.max(...breakdown.map((b) => Math.abs(b.net)), 1);
@@ -26,7 +31,9 @@ export function CategoryBreakdown({ breakdown }: { breakdown: CategoryStat[] }) 
           >
             <div className="flex items-center gap-3">
               <CategoryBadge category={entry.category} />
-              <span className="font-mono text-xs text-muted">{entry.count} pari(s) · mise {entry.wagered.toLocaleString("fr-FR")} €</span>
+              <span className="font-mono text-xs text-muted">
+                {tp("profile.categoryEntry", entry.count, { amount: `${entry.wagered.toLocaleString("fr-FR")} €` })}
+              </span>
             </div>
             <div className="flex items-center gap-3">
               <div className="h-1.5 w-24 overflow-hidden rounded-full bg-line">

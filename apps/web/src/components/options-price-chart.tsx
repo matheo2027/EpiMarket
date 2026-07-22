@@ -5,6 +5,8 @@ import type { OptionPricePoint } from "@/lib/types";
 import { ChartArrowButton } from "@/components/chart-arrow-button";
 import { optionTone } from "@/lib/option-tones";
 import { useHoldRepeat } from "@/lib/use-hold-repeat";
+import { useLanguage } from "@/lib/language-context";
+import { localeFor } from "@/lib/i18n";
 
 const WIDTH = 640;
 const HEIGHT = 220;
@@ -19,10 +21,6 @@ const GRID_LEVELS = [0, 25, 50, 75, 100];
 type OptionMeta = { id: string; label: string; sortOrder: number };
 type Tick = { t: number; prices: Record<string, number> };
 
-function formatDay(t: number) {
-  return new Date(t).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
-}
-
 export function OptionsPriceChart({
   options,
   optionPricePoints,
@@ -30,6 +28,9 @@ export function OptionsPriceChart({
   options: OptionMeta[];
   optionPricePoints: OptionPricePoint[];
 }) {
+  const { language, t } = useLanguage();
+  const formatDay = (time: number) =>
+    new Date(time).toLocaleDateString(localeFor(language), { day: "2-digit", month: "short" });
   const gradientId = useId();
   const sortedOptions = useMemo(() => [...options].sort((a, b) => a.sortOrder - b.sortOrder), [options]);
 
@@ -72,8 +73,8 @@ export function OptionsPriceChart({
   if (ticks.length < 2) {
     return (
       <div className="flex h-56 flex-col items-center justify-center rounded-2xl border border-line bg-surface text-center">
-        <p className="text-sm text-muted">Pas encore d&apos;historique de prix.</p>
-        <p className="mt-1 text-xs text-muted">Soyez le premier à parier sur ce marché.</p>
+        <p className="text-sm text-muted">{t("marketDetail.noPriceHistory")}</p>
+        <p className="mt-1 text-xs text-muted">{t("marketDetail.beFirstToBet")}</p>
       </div>
     );
   }
@@ -123,7 +124,7 @@ export function OptionsPriceChart({
             );
           })}
         </div>
-        <p className="shrink-0 font-mono text-xs text-muted">{isLatest ? "aujourd'hui" : formatDay(current.t)}</p>
+        <p className="shrink-0 font-mono text-xs text-muted">{isLatest ? t("marketDetail.today") : formatDay(current.t)}</p>
       </div>
 
       <svg

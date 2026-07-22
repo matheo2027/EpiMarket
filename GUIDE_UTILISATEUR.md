@@ -15,6 +15,7 @@ Ce guide explique comment utiliser le site, côté visiteur/parieur et côté ad
 - [Signaler un problème](#signaler-un-problème)
 - [Espace administrateur](#espace-administrateur)
 - [Questions fréquentes](#questions-fréquentes)
+- [Le pied de page](#le-pied-de-page)
 
 ---
 
@@ -24,7 +25,11 @@ Cliquez sur **Créer un compte** en haut à droite. Il faut un email, un nom d'u
 
 Une fois inscrit, vous êtes connecté automatiquement. Pour vous reconnecter plus tard, utilisez **Connexion** avec le même email et mot de passe (l'email n'est pas sensible à la casse : `Bob@Exemple.com` et `bob@exemple.com` sont le même compte).
 
+Mot de passe oublié ? Le lien **Mot de passe oublié ?** sur la page de connexion mène à un formulaire où entrer votre email génère un lien de réinitialisation. Ce projet n'envoie pas de vrais emails : le lien s'affiche directement sur la page au lieu d'être envoyé — cliquez dessus pour choisir un nouveau mot de passe. Il expire au bout d'une heure et ne peut servir qu'une fois.
+
 Le bouton **Déconnexion** dans le header met fin à la session sur cet appareil.
+
+Le site est disponible en **français, anglais, espagnol et allemand** : un sélecteur de langue se trouve dans le header et dans le pied de page. Le choix est mémorisé sur cet appareil (pas besoin de le refaire à chaque visite). L'espace administrateur reste uniquement en français.
 
 ---
 
@@ -83,6 +88,8 @@ Votre solde est immédiatement débité du montant misé, et la cote du marché 
 
 Un pari ne peut être placé que si le marché est **ouvert** et dans sa **période active** (entre sa date de début et sa date de clôture). Si votre solde est insuffisant, le pari est refusé.
 
+Changé d'avis ? Tant que le marché n'est pas résolu, vous pouvez **retirer** un pari en cours depuis votre Profil — voir la section suivante.
+
 ---
 
 ## Le Profil
@@ -92,8 +99,11 @@ Accessible via le lien **Profil** dans le header (adresse `/portefeuille`). La p
 - Votre **solde disponible**, en gros et en évidence, ainsi que l'**adresse de votre wallet on-chain**.
 - Vos **statistiques** : taux de réussite (sur vos paris déjà résolus), gains/pertes nets, exposition en cours (mise sur vos paris pas encore résolus, comptée à part pour ne pas fausser vos gains/pertes), une **courbe de gains/pertes cumulés** dans le temps (naviguez avec le curseur ou les flèches, comme sur l'accueil), et une **répartition par catégorie** (dans quelles catégories vous gagnez ou perdez le plus).
 - Votre **historique de paris**, avec deux onglets :
-  - **En cours** : paris sur des marchés pas encore résolus.
-  - **Passés** : paris sur des marchés résolus, avec le gain reçu (ou 0 € si le pari a perdu).
+  - **En cours** : paris sur des marchés pas encore résolus et pas retirés. Chacun a un bouton
+    **Retirer** — annule le pari et vous rembourse exactement votre mise (ni gain, ni perte : voir
+    "Puis-je annuler un pari ?" dans la FAQ).
+  - **Passés** : paris sur des marchés résolus (avec le gain reçu, ou 0 € si le pari a perdu) ou que
+    vous avez retirés (marqués **Retiré**, avec le montant remboursé).
 
 Chaque pari affiche aussi le **hash de sa transaction on-chain** : la preuve qu'il correspond à une
 vraie transaction sur la blockchain, pas juste une ligne dans une base de données. Chaque ligne de
@@ -188,10 +198,16 @@ Un marché démarre neutre : sans pari, il n'y a pas encore d'information pour p
 Le marché a probablement été résolu entre le moment où vous avez ouvert la page et celui où vous avez validé le pari (ou votre solde est insuffisant). Rechargez la page pour voir son état actuel.
 
 **Puis-je annuler un pari ?**
-Non, ni vous ni un administrateur : une fois placé, un pari verrouille votre mise sur la blockchain et il n'existe aucun mécanisme pour l'annuler. Vérifiez bien votre choix (camp et montant) avant de valider.
+Oui, tant que le marché n'est pas résolu : depuis votre Profil, un pari "En cours" a un bouton **Retirer** qui vous rembourse exactement votre mise (ni gain, ni perte). Une fois le marché résolu, ce n'est plus possible, ni pour vous ni pour un administrateur.
 
 **Que veut dire "payout: 0 €" sur un pari passé ?**
 Le pari a perdu — vous n'avez pas récupéré votre mise. C'est différent d'un pari "en attente" (marché pas encore résolu), affiché sans montant.
 
 **J'ai un message d'erreur qui parle d'une transaction mais mon pari n'apparaît pas, que faire ?**
 Utilisez la page **Support** pour créer un ticket — le hash de transaction de l'erreur est repris automatiquement si vous y arrivez via le lien affiché dans le message d'erreur. Un admin pourra vérifier la transaction et resynchroniser votre compte si besoin.
+
+---
+
+## Le pied de page
+
+En bas de chaque page, un pied de page reprend les catégories de marchés (lien direct vers `/marches` filtré sur cette catégorie), les liens utiles du site (Marchés, Classement, Support, Comment ça fonctionne, Connexion/Créer un compte), un lien vers le code source du projet, et une mention rappelant que ce projet est un exercice pédagogique Epitech à portefeuille entièrement virtuel. Le sélecteur de langue s'y trouve aussi, à côté du sélecteur déjà présent dans le header.

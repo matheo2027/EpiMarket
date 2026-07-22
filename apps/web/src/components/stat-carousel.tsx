@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { StatsHistoryPoint } from "@/lib/types";
 import { StatChart, type StatChartPoint, type Tone } from "@/components/stat-chart";
+import { useLanguage } from "@/lib/language-context";
 
 type Slide = {
   key: string;
@@ -17,6 +18,7 @@ function eurFormat(n: number): string {
 }
 
 export function StatCarousel({ history }: { history: StatsHistoryPoint[] }) {
+  const { t } = useLanguage();
   const trackRef = useRef<HTMLDivElement>(null);
   const dragState = useRef<{ startX: number; startScrollLeft: number; dragged: boolean } | null>(null);
   const [active, setActive] = useState(0);
@@ -26,31 +28,31 @@ export function StatCarousel({ history }: { history: StatsHistoryPoint[] }) {
     () => [
       {
         key: "openMarkets",
-        label: "Marchés ouverts",
+        label: t("stat.openMarkets"),
         tone: "brand",
         points: history.map((h) => ({ date: h.date, value: h.openMarkets })),
       },
       {
         key: "totalVolume",
-        label: "Volume total",
+        label: t("stat.totalVolume"),
         tone: "yes",
         points: history.map((h) => ({ date: h.date, value: Number(h.totalVolume) })),
         format: eurFormat,
       },
       {
         key: "activeBets",
-        label: "Paris actifs",
+        label: t("stat.activeBets"),
         tone: "series-3",
         points: history.map((h) => ({ date: h.date, value: h.activeBets })),
       },
       {
         key: "bettors",
-        label: "Parieurs",
+        label: t("stat.bettors"),
         tone: "series-4",
         points: history.map((h) => ({ date: h.date, value: h.bettors })),
       },
     ],
-    [history],
+    [history, t],
   );
 
   function scrollToIndex(index: number) {

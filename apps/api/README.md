@@ -37,11 +37,12 @@ risque de toucher aux données de dev. Chaque fichier réinitialise les tables a
 résolution de marché) passent par le même compte owner/funder — les paralléliser ferait collisionner le
 nonce entre workers.
 
-Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`), marchés
-(création admin-only, recherche/tri, cycle complet pari→résolution→payout en BINARY et en MULTI, fenêtre
-de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions de lecture), favoris,
-commentaires, classement. Pas exhaustif (pas de couverture tickets/diagnostics/admin utilisateurs pour
-l'instant) — un premier passage, à étendre au fil de l'eau.
+Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/auth/me`, réinitialisation
+de mot de passe), marchés (création admin-only, recherche/tri, cycle complet pari→résolution→payout en
+BINARY et en MULTI, fenêtre de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions
+de lecture), retrait de pari avant résolution (remboursement, double-retrait refusé, exclusion correcte
+du calcul de résolution), favoris, commentaires, classement. Pas exhaustif (pas de couverture
+tickets/diagnostics/admin utilisateurs pour l'instant) — un premier passage, à étendre au fil de l'eau.
 
 ## Schéma
 
@@ -59,6 +60,8 @@ Compte utilisateur + portefeuille virtuel.
 | `walletBalance`  | `Decimal`  | miroir du solde on-chain réel (0 par défaut, mis à jour après chaque mint/pari/résolution — voir `syncUserBalance`, section Intégration blockchain plus bas) |
 | `walletAddress`  | `String?`  | adresse du wallet custodial on-chain, en clair. Nullable : lignes existantes avant l'ajout du POC blockchain, et surtout tout compte `ADMIN` (jamais provisionné, voir plus bas) |
 | `encryptedPrivateKey` | `String?` | clé privée du wallet, chiffrée au repos (AES-256-GCM, voir `src/blockchain/wallet.ts`). Jamais renvoyée par l'API |
+| `resetTokenHash` | `String?` | SHA-256 du token de réinitialisation de mot de passe en cours, `null` sinon (voir `POST /auth/forgot-password` plus bas) |
+| `resetTokenExpiresAt` | `DateTime?` | expiration du token ci-dessus (1h) |
 | `createdAt`      | `DateTime` |                                         |
 
 Relation : un `User` a plusieurs `Bet`.
@@ -118,9 +121,11 @@ Un pari placé par un utilisateur sur un marché.
 | `optionId`    | `String?`  | FK vers `MarketOption` — pari sur un marché `MULTI`, `null` pour un marché `BINARY` |
 | `amount`      | `Decimal`  | montant misé                               |
 | `price`       | `Decimal`  | prix du camp/de l'option choisi au moment du pari (0 à 1) |
-| `payout`      | `Decimal?` | `null` tant que le marché est ouvert, sinon montant reçu (0 si perdant) — copié depuis le contrat, jamais recalculé en TypeScript |
+| `payout`      | `Decimal?` | `null` tant que le pari n'est pas réglé, sinon montant reçu (0 si perdant, = `amount` si retiré) — copié depuis le contrat, jamais recalculé en TypeScript |
 | `txHash`      | `String?`  | hash de la transaction `placeBet`/`placeMultiBet` on-chain, preuve du pari réel sur la chaîne |
 | `createdAt`   | `DateTime` |                                             |
+| `chainIndex`  | `Int`      | index de ce pari dans le tableau on-chain (`marketBets`/`multiMarketBets`), capturé depuis l'event `BetPlaced`/`MultiBetPlaced` à la création — sert à cibler ce pari précis pour un retrait (`withdrawBet`/`withdrawMultiBet`) |
+| `withdrawnAt` | `DateTime?` | posé si l'utilisateur a annulé ce pari avant résolution (voir `POST /bets/:id/withdraw` plus bas) — `null` sinon |
 | `userId`      | `String`   | FK vers `User`                             |
 | `marketId`    | `String`   | FK vers `Market`                           |
 
@@ -163,7 +168,17 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 ## Routes
 
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
-  tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force.
+  tentatives / 15 min par IP (`express-rate-limit`) pour freiner le brute-force (désactivé quand
+  `NODE_ENV=test`, sinon la suite d'intégration elle-même déclenche la limite).
+- `POST /auth/forgot-password` — `{ email }`. Pas d'infra email dans ce POC : au lieu d'envoyer un
+  vrai email, génère un token aléatoire (32 octets), stocke son hash SHA-256 + une expiration (1h) sur
+  l'utilisateur, et **renvoie le token brut directement dans la réponse** (`{ resetToken }`) — le
+  frontend l'affiche comme un lien cliquable. `404` si l'email n'existe pas (pas de dissimulation
+  d'existence de compte puisque le flux n'est de toute façon pas email-based). Même rate limit que
+  `register`/`login`.
+- `POST /auth/reset-password` — `{ token, newPassword }`. Hash le token reçu et cherche une
+  correspondance non expirée ; `400` si invalide/expiré. Met à jour `passwordHash` et efface le token
+  (usage unique — un second appel avec le même token échoue).
 - `GET /markets`, `GET /markets/:id` — public. Renvoie `options` (avec le prix courant de chacune) pour
   un marché `MULTI`.
 - `GET /markets/:id/price-history` — public. Pour un marché `BINARY`, liste des `PricePoint` triés par
@@ -192,6 +207,14 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
   le `txHash` de la transaction plutôt qu'une erreur générique, pour que l'utilisateur puisse le signaler
   (voir `POST /tickets`). Un revert Solidity (solde insuffisant, marché fermé...) devient un 400 avec le
   message du contrat.
+- `POST /bets/:id/withdraw` — annule un pari **avant résolution** (propriétaire uniquement, marché
+  encore `OPEN`, pari pas déjà réglé). Rembourse l'intégralité de la mise — ce n'est pas une vente au
+  prix du marché courant, juste l'inverse de `placeBet`/`placeMultiBet` (voir
+  `apps/blockchain/README.md`). Même mécanique de synchro que `POST /bets` (transaction on-chain
+  d'abord, puis Postgres, avec le même filet de sécurité `txHash` en cas d'échec de synchro). `payout`
+  est mis à `amount` (remboursement complet) et `withdrawnAt` posé ; `POST /markets/:id/resolve` ignore
+  ensuite ce pari dans son calcul (sinon la relecture du contrat écraserait le remboursement avec le
+  payout à 0 jamais touché par `resolveMarket` pour un pari retiré).
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
@@ -233,8 +256,8 @@ Modèle pari-mutuel (implémenté en Solidity, pas ici) : les gagnants se partag
 l'argent réellement misé sur ce marché (pas les pools virtuels de départ), proportionnellement à leur
 mise. Si personne n'a parié sur le camp gagnant, tout le monde est remboursé (push).
 
-Un pari ne peut plus être annulé une fois placé : le contrat n'a aucune fonction pour ça (l'argent est
-escrow on-chain dès `placeBet`), donc il n'existe pas de route d'annulation côté API.
+Un pari **résolu** ne peut plus être annulé — mais avant résolution, `POST /bets/:id/withdraw` permet de
+le retirer (remboursement intégral de la mise, voir plus haut).
 
 ## Intégration blockchain (POC Hardhat)
 
@@ -251,9 +274,14 @@ déploiement. Ici, le résumé côté backend :
 - `src/blockchain/contract.ts` expose trois façons de parler au contrat : `getReadOnlyContract()`
   (lectures), `getOwnerContract()` (créer/résoudre un marché, mint — signé par le wallet owner du
   contrat), `getUserContract(user)` (un pari, signé par le wallet du parieur, gas à sa charge).
-- `src/blockchain/provider.ts` sérialise les transactions du wallet owner (`runAsOwner`) : plusieurs
-  appels owner concurrents (inscriptions, résolutions) partagent le même compte et se prendraient sinon
-  des collisions de nonce.
+- `src/blockchain/provider.ts` sérialise les transactions par compte émetteur (`runAsSender`, dont
+  `runAsOwner` n'est qu'un cas particulier pour le wallet owner) : suit le nonce localement au lieu de le
+  relire à chaque envoi. Nécessaire pas seulement pour les appels owner concurrents (inscriptions,
+  résolutions) mais aussi dès qu'un même wallet utilisateur envoie deux transactions rapprochées (parier
+  puis retirer) — sans ça, la deuxième transaction peut échouer avec `"nonce has already been used"`
+  même si `getTransactionCount()` renvoie la bonne valeur au moment de l'appel. `src/routes/bets.ts`
+  passe donc toujours par `runAsSender(walletAddress, ...)` plutôt que d'appeler `getUserContract(user)`
+  directement.
 - Chaque nouveau compte est crédité en ETH de test (`fundWallet`) pour payer le gas de ses futures
   transactions, distribué par le compte owner du contrat — pas de vraie économie de gas à gérer sur un
   réseau local.

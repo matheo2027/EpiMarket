@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import type { DiagnosticsReport } from "@/lib/types";
@@ -83,7 +84,7 @@ export default function AdminDiagnosticsPage() {
           return;
         }
         setWaitingForChain(false);
-        setError(errorMessage(err));
+        setError(errorMessage(err, frT));
       });
   }, [token]);
 
@@ -110,7 +111,7 @@ export default function AdminDiagnosticsPage() {
       await action();
       load();
     } catch (err) {
-      setActionError(errorMessage(err));
+      setActionError(errorMessage(err, frT));
     }
   }
 

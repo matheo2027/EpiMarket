@@ -23,8 +23,12 @@ export type BetStats = {
   history: PnlPoint[];
 };
 
+function isWithdrawn(bet: Bet): boolean {
+  return bet.withdrawnAt !== null;
+}
+
 function isResolved(bet: Bet): boolean {
-  return bet.market?.status === "RESOLVED";
+  return bet.market?.status === "RESOLVED" && !isWithdrawn(bet);
 }
 
 function isWin(bet: Bet): boolean {
@@ -33,7 +37,9 @@ function isWin(bet: Bet): boolean {
 
 export function computeBetStats(bets: Bet[]): BetStats {
   const resolved = bets.filter(isResolved).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const ongoing = bets.filter((b) => !isResolved(b));
+  // A withdrawn bet already got its stake back — it's neither ongoing exposure
+  // nor a resolved win/loss, so it's excluded from both buckets.
+  const ongoing = bets.filter((b) => !isResolved(b) && !isWithdrawn(b));
 
   const wins = resolved.filter(isWin).length;
   const winRate = resolved.length > 0 ? wins / resolved.length : null;

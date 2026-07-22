@@ -7,9 +7,11 @@ import {
   getOnChainBalance,
   getReadOnlyContract,
   getUserContract,
+  readPlacedBetIndex,
   revertReason,
   sideToOutcome,
 } from "../blockchain/contract.js";
+import { runAsSender } from "../blockchain/provider.js";
 import { fromChainAmount, toChainAmount } from "../blockchain/units.js";
 
 export const betsRouter = Router();
@@ -96,13 +98,17 @@ betsRouter.post("/", requireAuth, async (req, res) => {
   }
 
   let txHash: string;
+  let chainIndex: number;
   try {
-    const tx =
-      market.type === "MULTI"
-        ? await getUserContract(user).placeMultiBet(market.id, option!.sortOrder, toChainAmount(amount))
-        : await getUserContract(user).placeBet(market.id, sideToOutcome(betSide!), toChainAmount(amount));
-    txHash = tx.hash;
-    await tx.wait();
+    const { hash, receipt } = await runAsSender(walletAddress, async (nonce) => {
+      const tx =
+        market.type === "MULTI"
+          ? await getUserContract(user).placeMultiBet(market.id, option!.sortOrder, toChainAmount(amount), { nonce })
+          : await getUserContract(user).placeBet(market.id, sideToOutcome(betSide!), toChainAmount(amount), { nonce });
+      return { hash: tx.hash, receipt: await tx.wait() };
+    });
+    txHash = hash;
+    chainIndex = readPlacedBetIndex(receipt, market.type === "MULTI" ? "MultiBetPlaced" : "BetPlaced");
   } catch (err) {
     res.status(400).json({ error: revertReason(err) ?? "Could not place the bet on-chain" });
     return;
@@ -125,6 +131,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
             amount: settledAmount,
             price: priceAtBet,
             txHash,
+            chainIndex,
           },
         });
 
@@ -174,6 +181,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
           amount: settledAmount,
           price: priceAtBet,
           txHash,
+          chainIndex,
         },
       });
 
@@ -204,6 +212,123 @@ betsRouter.post("/", requireAuth, async (req, res) => {
     );
     res.status(500).json({
       error: `Your bet was placed on-chain (tx ${txHash}) but could not be recorded. Contact an admin with this transaction hash.`,
+    });
+  }
+});
+
+// Refunds a bet in full while its market is still open — a pari-mutuel pool
+// has no counterparty to sell to before resolution, so this is a full
+// self-refund/cancellation, not a sale at the current market price (see
+// GUIDE_UTILISATEUR.md).
+betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
+  const bet = await prisma.bet.findUnique({ where: { id: req.params.id }, include: { market: true } });
+  if (!bet) {
+    res.status(404).json({ error: "Bet not found" });
+    return;
+  }
+  if (bet.userId !== req.user!.userId) {
+    res.status(403).json({ error: "Not allowed to withdraw this bet" });
+    return;
+  }
+  if (bet.market.status !== "OPEN") {
+    res.status(400).json({ error: "Market is not open for betting" });
+    return;
+  }
+  if (bet.withdrawnAt || bet.payout !== null) {
+    res.status(400).json({ error: "Bet already settled" });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user || !user.walletAddress || !user.encryptedPrivateKey) {
+    res.status(400).json({ error: "User has no custodial wallet" });
+    return;
+  }
+  const walletAddress = user.walletAddress;
+
+  let txHash: string;
+  try {
+    txHash = await runAsSender(walletAddress, async (nonce) => {
+      const tx =
+        bet.market.type === "MULTI"
+          ? await getUserContract(user).withdrawMultiBet(bet.marketId, bet.chainIndex, { nonce })
+          : await getUserContract(user).withdrawBet(bet.marketId, bet.chainIndex, { nonce });
+      await tx.wait();
+      return tx.hash;
+    });
+  } catch (err) {
+    res.status(400).json({ error: revertReason(err) ?? "Could not withdraw the bet on-chain" });
+    return;
+  }
+
+  try {
+    const newBalance = await getOnChainBalance(walletAddress);
+
+    if (bet.market.type === "MULTI") {
+      const [pools, totalVolumeUnits] = await getReadOnlyContract().getMultiMarket(bet.marketId);
+      const options = await prisma.marketOption.findMany({
+        where: { marketId: bet.marketId },
+        orderBy: { sortOrder: "asc" },
+      });
+
+      const updatedBet = await prisma.$transaction(async (tx) => {
+        const updatedBet = await tx.bet.update({
+          where: { id: bet.id },
+          data: { withdrawnAt: new Date(), payout: bet.amount },
+        });
+        for (let i = 0; i < options.length; i++) {
+          await tx.marketOption.update({ where: { id: options[i].id }, data: { pool: fromChainAmount(pools[i]) } });
+        }
+        await tx.market.update({ where: { id: bet.marketId }, data: { totalVolume: fromChainAmount(totalVolumeUnits) } });
+
+        const newPrices = computeOptionPrices(options.map((o, i) => ({ ...o, pool: fromChainAmount(pools[i]) })));
+        const priceTimestamp = new Date();
+        await tx.optionPricePoint.createMany({
+          data: newPrices.map((o) => ({ optionId: o.id, price: o.price, timestamp: priceTimestamp })),
+        });
+        await tx.user.update({ where: { id: user.id }, data: { walletBalance: newBalance } });
+
+        return updatedBet;
+      });
+
+      const updatedMarket = await prisma.market.findUniqueOrThrow({
+        where: { id: bet.marketId },
+        include: { options: { orderBy: { sortOrder: "asc" } } },
+      });
+      res.json({ bet: updatedBet, market: { ...updatedMarket, options: computeOptionPrices(updatedMarket.options) } });
+      return;
+    }
+
+    const onChainMarket = await getReadOnlyContract().markets(bet.marketId);
+    const { updatedBet, updatedMarket } = await prisma.$transaction(async (tx) => {
+      const updatedBet = await tx.bet.update({
+        where: { id: bet.id },
+        data: { withdrawnAt: new Date(), payout: bet.amount },
+      });
+      const updatedMarket = await tx.market.update({
+        where: { id: bet.marketId },
+        data: {
+          yesPool: fromChainAmount(onChainMarket.yesPool),
+          noPool: fromChainAmount(onChainMarket.noPool),
+          totalVolume: fromChainAmount(onChainMarket.totalVolume),
+        },
+      });
+
+      const newPrices = computePrices(updatedMarket);
+      await tx.pricePoint.create({ data: { marketId: bet.marketId, yesPrice: newPrices.yesPrice } });
+      await tx.user.update({ where: { id: user.id }, data: { walletBalance: newBalance } });
+
+      return { updatedBet, updatedMarket };
+    });
+
+    res.json({ bet: updatedBet, market: { ...updatedMarket, ...computePrices(updatedMarket) } });
+  } catch (err) {
+    console.error(
+      `Bet withdrawn on-chain (tx ${txHash}) but syncing it to the database failed — user ${user.id}, bet ${bet.id}:`,
+      err,
+    );
+    res.status(500).json({
+      error: `Your withdrawal was processed on-chain (tx ${txHash}) but could not be recorded. Contact an admin with this transaction hash.`,
     });
   }
 });

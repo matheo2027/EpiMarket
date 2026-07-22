@@ -22,6 +22,7 @@ contract EpiMarket {
         Outcome side;
         uint256 amount;
         uint256 payout;
+        bool withdrawn;
     }
 
     struct MultiMarket {
@@ -37,6 +38,7 @@ contract EpiMarket {
         uint8 optionIndex;
         uint256 amount;
         uint256 payout;
+        bool withdrawn;
     }
 
     string public constant name = "EpiMarket Token";
@@ -62,10 +64,18 @@ contract EpiMarket {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     event MarketCreated(string marketId);
-    event BetPlaced(string indexed marketId, address indexed bettor, Outcome side, uint256 amount);
+    event BetPlaced(string indexed marketId, address indexed bettor, Outcome side, uint256 amount, uint256 index);
+    event BetWithdrawn(string indexed marketId, address indexed bettor, uint256 amount);
     event MarketResolved(string marketId, Outcome outcome, uint256 totalPool);
     event MultiMarketCreated(string marketId, uint8 optionCount);
-    event MultiBetPlaced(string indexed marketId, address indexed bettor, uint8 optionIndex, uint256 amount);
+    event MultiBetPlaced(
+        string indexed marketId,
+        address indexed bettor,
+        uint8 optionIndex,
+        uint256 amount,
+        uint256 index
+    );
+    event MultiBetWithdrawn(string indexed marketId, address indexed bettor, uint256 amount);
     event MultiMarketResolved(string marketId, uint8 winningOption, uint256 totalPool);
 
     modifier onlyOwner() {
@@ -141,8 +151,38 @@ contract EpiMarket {
         }
         market.totalVolume += amount;
 
-        marketBets[marketId].push(BetRecord({ bettor: msg.sender, side: side, amount: amount, payout: 0 }));
-        emit BetPlaced(marketId, msg.sender, side, amount);
+        marketBets[marketId].push(
+            BetRecord({ bettor: msg.sender, side: side, amount: amount, payout: 0, withdrawn: false })
+        );
+        emit BetPlaced(marketId, msg.sender, side, amount, marketBets[marketId].length - 1);
+    }
+
+    // Refunds a bet in full while the market is still open — not a sale at
+    // market price (a pari-mutuel pool has no counterparty to sell to before
+    // resolution), just letting a bettor undo their own stake.
+    function withdrawBet(string calldata marketId, uint256 index) external {
+        Market storage market = markets[marketId];
+        require(market.exists, "Market not found");
+        require(!market.resolved, "Market is not open for betting");
+        require(index < marketBets[marketId].length, "Invalid bet index");
+
+        BetRecord storage bet = marketBets[marketId][index];
+        require(bet.bettor == msg.sender, "Not your bet");
+        require(!bet.withdrawn, "Bet already withdrawn");
+
+        bet.withdrawn = true;
+
+        if (bet.side == Outcome.YES) {
+            market.yesPool -= bet.amount;
+        } else {
+            market.noPool -= bet.amount;
+        }
+        market.totalVolume -= bet.amount;
+
+        balanceOf[address(this)] -= bet.amount;
+        balanceOf[msg.sender] += bet.amount;
+        emit Transfer(address(this), msg.sender, bet.amount);
+        emit BetWithdrawn(marketId, msg.sender, bet.amount);
     }
 
     function resolveMarket(string calldata marketId, Outcome outcome) external onlyOwner {
@@ -160,6 +200,7 @@ contract EpiMarket {
         uint256 totalPool = market.totalVolume;
         uint256 winningPool = 0;
         for (uint256 i = 0; i < bets.length; i++) {
+            if (bets[i].withdrawn) continue;
             if (bets[i].side == outcome) {
                 winningPool += bets[i].amount;
             }
@@ -168,6 +209,7 @@ contract EpiMarket {
         uint256 distributed = 0;
         int256 lastWinnerIndex = -1;
         for (uint256 i = 0; i < bets.length; i++) {
+            if (bets[i].withdrawn) continue;
             uint256 payout;
             if (winningPool == 0) {
                 payout = bets[i].amount;
@@ -205,9 +247,9 @@ contract EpiMarket {
     function getBet(
         string calldata marketId,
         uint256 index
-    ) external view returns (address bettor, Outcome side, uint256 amount, uint256 payout) {
+    ) external view returns (address bettor, Outcome side, uint256 amount, uint256 payout, bool withdrawn) {
         BetRecord storage bet = marketBets[marketId][index];
-        return (bet.bettor, bet.side, bet.amount, bet.payout);
+        return (bet.bettor, bet.side, bet.amount, bet.payout, bet.withdrawn);
     }
 
     function createMultiMarket(string calldata marketId, uint8 optionCount) external onlyOwner {
@@ -243,9 +285,31 @@ contract EpiMarket {
         market.totalVolume += amount;
 
         multiMarketBets[marketId].push(
-            MultiBetRecord({ bettor: msg.sender, optionIndex: optionIndex, amount: amount, payout: 0 })
+            MultiBetRecord({ bettor: msg.sender, optionIndex: optionIndex, amount: amount, payout: 0, withdrawn: false })
         );
-        emit MultiBetPlaced(marketId, msg.sender, optionIndex, amount);
+        emit MultiBetPlaced(marketId, msg.sender, optionIndex, amount, multiMarketBets[marketId].length - 1);
+    }
+
+    // Same full-refund-only withdrawal as withdrawBet, for a multi-outcome market.
+    function withdrawMultiBet(string calldata marketId, uint256 index) external {
+        MultiMarket storage market = multiMarkets[marketId];
+        require(market.exists, "Market not found");
+        require(!market.resolved, "Market is not open for betting");
+        require(index < multiMarketBets[marketId].length, "Invalid bet index");
+
+        MultiBetRecord storage bet = multiMarketBets[marketId][index];
+        require(bet.bettor == msg.sender, "Not your bet");
+        require(!bet.withdrawn, "Bet already withdrawn");
+
+        bet.withdrawn = true;
+
+        market.pools[bet.optionIndex] -= bet.amount;
+        market.totalVolume -= bet.amount;
+
+        balanceOf[address(this)] -= bet.amount;
+        balanceOf[msg.sender] += bet.amount;
+        emit Transfer(address(this), msg.sender, bet.amount);
+        emit MultiBetWithdrawn(marketId, msg.sender, bet.amount);
     }
 
     function resolveMultiMarket(string calldata marketId, uint8 winningOption) external onlyOwner {
@@ -262,6 +326,7 @@ contract EpiMarket {
         uint256 totalPool = market.totalVolume;
         uint256 winningPool = 0;
         for (uint256 i = 0; i < bets.length; i++) {
+            if (bets[i].withdrawn) continue;
             if (bets[i].optionIndex == winningOption) {
                 winningPool += bets[i].amount;
             }
@@ -270,6 +335,7 @@ contract EpiMarket {
         uint256 distributed = 0;
         int256 lastWinnerIndex = -1;
         for (uint256 i = 0; i < bets.length; i++) {
+            if (bets[i].withdrawn) continue;
             uint256 payout;
             if (winningPool == 0) {
                 payout = bets[i].amount;
@@ -318,8 +384,8 @@ contract EpiMarket {
     function getMultiBet(
         string calldata marketId,
         uint256 index
-    ) external view returns (address bettor, uint8 optionIndex, uint256 amount, uint256 payout) {
+    ) external view returns (address bettor, uint8 optionIndex, uint256 amount, uint256 payout, bool withdrawn) {
         MultiBetRecord storage bet = multiMarketBets[marketId][index];
-        return (bet.bettor, bet.optionIndex, bet.amount, bet.payout);
+        return (bet.bettor, bet.optionIndex, bet.amount, bet.payout, bet.withdrawn);
     }
 }

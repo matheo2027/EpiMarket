@@ -4,9 +4,11 @@ import Script from "next/script";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { FavoritesProvider } from "@/lib/favorites-context";
+import { LanguageProvider } from "@/lib/language-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { ConfirmProvider } from "@/lib/confirm-context";
 import { Header } from "@/components/header";
+import { Footer } from "@/components/footer";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -44,12 +46,15 @@ export default function RootLayout({
         <div className="bg-orbs" aria-hidden="true" />
         <AuthProvider>
           <FavoritesProvider>
-            <ThemeProvider>
-              <ConfirmProvider>
-                <Header />
-                <main className="flex-1">{children}</main>
-              </ConfirmProvider>
-            </ThemeProvider>
+            <LanguageProvider>
+              <ThemeProvider>
+                <ConfirmProvider>
+                  <Header />
+                  <main className="flex-1">{children}</main>
+                  <Footer />
+                </ConfirmProvider>
+              </ThemeProvider>
+            </LanguageProvider>
           </FavoritesProvider>
         </AuthProvider>
       </body>

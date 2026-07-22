@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState, type SubmitEvent } from "react";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 
 export default function InscriptionPage() {
   const { register } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -23,7 +25,7 @@ export default function InscriptionPage() {
       await register(email, username, password);
       router.push("/");
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -31,14 +33,14 @@ export default function InscriptionPage() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Créer un compte</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("auth.registerTitle")}</h1>
       <p className="mt-2 text-sm text-muted">
-        Vous démarrez avec <span className="font-mono text-paper">1000&nbsp;€</span> de portefeuille virtuel.
+        {t("auth.registerSubtitle", { amount: "1000 €" })}
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Email</span>
+          <span className="text-sm font-medium text-muted">{t("auth.email")}</span>
           <input
             type="email"
             required
@@ -49,7 +51,7 @@ export default function InscriptionPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Nom d&apos;utilisateur</span>
+          <span className="text-sm font-medium text-muted">{t("auth.username")}</span>
           <input
             type="text"
             required
@@ -61,7 +63,7 @@ export default function InscriptionPage() {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Mot de passe</span>
+          <span className="text-sm font-medium text-muted">{t("auth.password")}</span>
           <input
             type="password"
             required
@@ -70,7 +72,7 @@ export default function InscriptionPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-paper outline-none focus-visible:border-brand"
           />
-          <span className="text-xs text-muted">8 caractères minimum.</span>
+          <span className="text-xs text-muted">{t("auth.passwordHint")}</span>
         </label>
 
         {error && (
@@ -82,14 +84,14 @@ export default function InscriptionPage() {
           disabled={submitting}
           className="mt-2 rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
         >
-          {submitting ? "Création…" : "Créer mon compte"}
+          {submitting ? t("auth.submittingRegister") : t("auth.submitRegister")}
         </button>
       </form>
 
       <p className="mt-6 text-sm text-muted">
-        Déjà un compte ?{" "}
+        {t("auth.alreadyHaveAccount")}{" "}
         <Link href="/connexion" className="text-brand hover:underline">
-          Se connecter
+          {t("auth.loginLink")}
         </Link>
       </p>
     </div>

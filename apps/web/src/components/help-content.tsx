@@ -1,3 +1,7 @@
+"use client";
+
+import { useLanguage } from "@/lib/language-context";
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
@@ -10,72 +14,44 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function UserGuideContent() {
+  const { t } = useLanguage();
   return (
     <>
-      <Section title="Créer un compte et se connecter">
-        <p>
-          Un compte démarre automatiquement avec <strong>1000 € de portefeuille virtuel</strong>{" "}
-          — aucun argent réel n&apos;est impliqué.
-        </p>
+      <Section title={t("help.section.account")}>
+        <p>{t("help.account", { amount: "1000 €" })}</p>
       </Section>
 
-      <Section title="La page d'accueil">
-        <p>
-          En haut, un <strong>carousel de statistiques</strong> (marchés ouverts, volume, paris actifs,
-          parieurs) sous forme de courbes navigables : glissez ou utilisez les flèches pour changer de
-          statistique, déplacez le curseur sur une courbe pour voir sa valeur à une date passée — pas
-          besoin de cliquer. En dessous, le marché du moment et une grille des marchés ouverts.
-        </p>
+      <Section title={t("help.section.home")}>
+        <p>{t("help.home")}</p>
       </Section>
 
-      <Section title="Parcourir les marchés et comprendre un marché">
-        <p>Filtrez par statut (Ouverts/Résolus) et catégorie. Il existe deux types de marché :</p>
+      <Section title={t("help.section.markets")}>
+        <p>{t("help.markets.intro")}</p>
         <ul className="list-disc pl-4">
-          <li><strong>OUI/NON</strong> : ce qui compte comme &quot;oui&quot; et comme &quot;non&quot; est écrit sur la page — lisez-le avant de parier, c&apos;est ce qui décide qui gagne. La cote actuelle s&apos;affiche en barre de répartition.</li>
-          <li><strong>Options multiples</strong> (ex. &quot;qui remporte le tournoi ?&quot;) : une ligne par option avec son pourcentage. Un seul camp peut gagner.</li>
-          <li>Dans les deux cas, un graphe d&apos;évolution du prix montre comment la cote a bougé dans le temps.</li>
+          <li>{t("help.markets.binary")}</li>
+          <li>{t("help.markets.multi")}</li>
+          <li>{t("help.markets.chart")}</li>
         </ul>
       </Section>
 
-      <Section title="Placer un pari">
-        <p>
-          Choisissez votre camp (ou votre option), un montant, et un <strong>gain estimé</strong>{" "}
-          s&apos;affiche avant de valider. Ce n&apos;est pas garanti : d&apos;autres personnes peuvent encore parier avant la
-          clôture. Le pari n&apos;est possible que sur un marché ouvert, dans sa période active, et avec un
-          solde suffisant.
-        </p>
+      <Section title={t("help.section.bet")}>
+        <p>{t("help.bet")}</p>
       </Section>
 
-      <Section title="Le Profil">
-        <p>
-          Solde, adresse du wallet on-chain, et des statistiques : taux de réussite, gains/pertes nets,
-          exposition en cours (mise sur les paris pas encore résolus, comptée à part), une courbe de
-          gains/pertes cumulés, et une répartition par catégorie. En dessous, l&apos;historique des paris
-          (en cours / passés), chacun avec le hash de sa transaction on-chain.
-        </p>
+      <Section title={t("help.section.profile")}>
+        <p>{t("help.profile")}</p>
       </Section>
 
-      <Section title="Comment sont calculés les gains">
-        <p>
-          Modèle <strong>pari-mutuel</strong> (comme aux courses hippiques) : à la clôture, tout
-          l&apos;argent réellement misé est reversé aux gagnants, au prorata de leur mise. Si personne
-          n&apos;a parié sur le camp gagnant, tout le monde est remboursé.
-        </p>
+      <Section title={t("help.section.gains")}>
+        <p>{t("help.gains")}</p>
       </Section>
 
-      <Section title="Le Classement">
-        <p>
-          Accessible sans être connecté, il liste les 50 meilleurs parieurs classés par gain net réalisé
-          (même calcul que sur votre Profil). Seuls les paris déjà résolus comptent.
-        </p>
+      <Section title={t("help.section.classement")}>
+        <p>{t("help.classement")}</p>
       </Section>
 
-      <Section title="Signaler un problème">
-        <p>
-          La page <strong>Support</strong> permet de créer un ticket (sujet + message). Si vous y arrivez
-          depuis un message d&apos;erreur qui mentionne une transaction, le formulaire est pré-rempli
-          automatiquement avec son hash.
-        </p>
+      <Section title={t("help.section.support")}>
+        <p>{t("help.support")}</p>
       </Section>
     </>
   );

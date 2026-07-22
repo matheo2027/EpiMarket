@@ -55,6 +55,9 @@ model User {
   walletAddress       String? @unique
   encryptedPrivateKey String?
 
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
+
   bets      Bet[]
   tickets   Ticket[]
   favorites Favorite[]
@@ -109,13 +112,15 @@ model MarketOption {
 }
 
 model Bet {
-  id        String   @id @default(cuid())
-  side      BetSide?
-  amount    Decimal  @db.Decimal(18, 2)
-  price     Decimal  @db.Decimal(5, 4)
-  payout    Decimal? @db.Decimal(18, 2)
-  txHash    String?
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  side        BetSide?
+  amount      Decimal   @db.Decimal(18, 2)
+  price       Decimal   @db.Decimal(5, 4)
+  payout      Decimal?  @db.Decimal(18, 2)
+  txHash      String?
+  createdAt   DateTime  @default(now())
+  chainIndex  Int       @default(0)
+  withdrawnAt DateTime?
 
   userId String
   user   User   @relation(fields: [userId], references: [id])

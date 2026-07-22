@@ -1,0 +1,80 @@
+"use client";
+
+import Link from "next/link";
+import type { Market, StatsHistoryPoint } from "@/lib/types";
+import { MarketCard } from "@/components/market-card";
+import { CategoryBadge } from "@/components/category-badge";
+import { SplitBar } from "@/components/split-bar";
+import { StatCarousel } from "@/components/stat-carousel";
+import { useLanguage } from "@/lib/language-context";
+
+export function HomeContent({ markets, history }: { markets: Market[] | null; history: StatsHistoryPoint[] }) {
+  const { t } = useLanguage();
+
+  if (markets === null) {
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-32 text-center">
+        <h1 className="font-display text-4xl font-semibold tracking-tight">EpiMarket</h1>
+        <p className="mt-4 text-muted">{t("home.serverError")}</p>
+      </div>
+    );
+  }
+
+  if (markets.length === 0) {
+    return (
+      <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-32 text-center">
+        <h1 className="font-display text-4xl font-semibold tracking-tight">EpiMarket</h1>
+        <p className="mt-4 text-muted">{t("home.noOpenMarkets")}</p>
+      </div>
+    );
+  }
+
+  const featured = [...markets].sort((a, b) => Number(b.totalVolume) - Number(a.totalVolume))[0];
+  const rest = markets.filter((m) => m.id !== featured.id);
+
+  return (
+    <div className="mx-auto max-w-6xl px-6 py-12">
+      {history.length >= 2 && (
+        <div className="mb-8">
+          <StatCarousel history={history} />
+        </div>
+      )}
+
+      <Link
+        href={`/marches/${featured.id}`}
+        className="group block rounded-3xl border border-line bg-surface p-8 transition-colors hover:border-brand sm:p-10"
+      >
+        <div className="flex items-center gap-3">
+          <CategoryBadge category={featured.category} />
+          <span className="font-mono text-xs uppercase tracking-wide text-muted">{t("home.featuredLabel")}</span>
+        </div>
+        <h1 className="mt-5 max-w-3xl font-display text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">
+          {featured.title}
+        </h1>
+        <div className="mt-8 max-w-xl">
+          <SplitBar yesPrice={featured.yesPrice} size="lg" animateIn />
+        </div>
+        <div className="mt-6 flex items-center gap-6 font-mono text-xs text-muted">
+          <span>{t("home.volume", { amount: `${Number(featured.totalVolume).toLocaleString("fr-FR")} €` })}</span>
+          <span className="text-brand opacity-0 transition-opacity group-hover:opacity-100">{t("home.bet")}</span>
+        </div>
+      </Link>
+
+      {rest.length > 0 && (
+        <div className="mt-12">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl font-semibold tracking-tight">{t("home.openMarkets")}</h2>
+            <Link href="/marches" className="text-sm text-muted transition-colors hover:text-paper">
+              {t("home.seeAll")}
+            </Link>
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {rest.slice(0, 6).map((market) => (
+              <MarketCard key={market.id} market={market} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

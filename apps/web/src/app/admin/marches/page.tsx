@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import type { Market } from "@/lib/types";
@@ -23,7 +24,7 @@ export default function AdminMarketsPage() {
   const load = useCallback(() => {
     apiFetch<{ markets: Market[] }>("/markets")
       .then((data) => setMarkets(data.markets))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, frT)));
   }, []);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function AdminMarketsPage() {
       await apiFetch(`/markets/${market.id}/resolve`, { method: "POST", token, body: { outcome } });
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusyId(null);
     }
@@ -67,7 +68,7 @@ export default function AdminMarketsPage() {
       await apiFetch(`/markets/${market.id}/resolve`, { method: "POST", token, body: { optionId } });
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusyId(null);
     }
@@ -87,7 +88,7 @@ export default function AdminMarketsPage() {
       await apiFetch(`/markets/${market.id}`, { method: "DELETE", token });
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusyId(null);
     }

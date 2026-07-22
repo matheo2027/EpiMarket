@@ -77,6 +77,21 @@ export async function provisionNewWallet(userId: string, address: string): Promi
   }
 }
 
+/**
+ * Reads the `index` a bet landed at on-chain straight out of the transaction
+ * receipt's `BetPlaced`/`MultiBetPlaced` event, rather than assuming it from
+ * `getBetCount()` timing (which can race under concurrent bets on the same
+ * market) — needed so a later withdrawal can target the exact right bet.
+ */
+export function readPlacedBetIndex(receipt: ethers.ContractTransactionReceipt, eventName: string): number {
+  for (const log of receipt.logs) {
+    if ("fragment" in log && (log as ethers.EventLog).fragment?.name === eventName) {
+      return Number((log as ethers.EventLog).args.index);
+    }
+  }
+  throw new Error(`${eventName} event not found in transaction receipt`);
+}
+
 export function revertReason(err: unknown): string | undefined {
   const e = err as { reason?: string; shortMessage?: string };
   return e?.reason ?? e?.shortMessage;
