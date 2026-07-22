@@ -1,4 +1,7 @@
+"use client";
+
 import { optionTone } from "@/lib/option-tones";
+import { useLanguage } from "@/lib/language-context";
 import type { MarketOption } from "@/lib/types";
 
 export function OptionsBar({
@@ -10,6 +13,7 @@ export function OptionsBar({
   resolvedOptionId?: string | null;
   compact?: boolean;
 }) {
+  const { tp } = useLanguage();
   const sorted = [...options].sort((a, b) => a.sortOrder - b.sortOrder);
   const visible = compact ? sorted.slice(0, 4) : sorted;
   const hiddenCount = sorted.length - visible.length;
@@ -38,7 +42,7 @@ export function OptionsBar({
           </div>
         );
       })}
-      {hiddenCount > 0 && <p className="font-mono text-xs text-muted">+{hiddenCount} autres options</p>}
+      {hiddenCount > 0 && <p className="font-mono text-xs text-muted">{tp("optionsBar.moreOptions", hiddenCount)}</p>}
     </div>
   );
 }

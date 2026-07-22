@@ -2,20 +2,23 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useFavorites } from "@/lib/favorites-context";
+import { useLanguage } from "@/lib/language-context";
 
 export function FavoriteButton({ marketId }: { marketId: string }) {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { isFavorited, toggleFavorite } = useFavorites();
 
   if (!user || user.role === "ADMIN") return null;
 
   const favorited = isFavorited(marketId);
+  const label = favorited ? t("favorite.remove") : t("favorite.add");
 
   return (
     <button
       type="button"
-      aria-label={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
-      title={favorited ? "Retirer des favoris" : "Ajouter aux favoris"}
+      aria-label={label}
+      title={label}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();

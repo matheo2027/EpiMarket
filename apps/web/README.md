@@ -16,6 +16,39 @@ JWT géré côté client (pas NextAuth) : `src/lib/auth-context.tsx` stocke le t
 
 Comme le token vit en `localStorage`, toute page qui a besoin de la session (portefeuille, formulaire de pari, admin) est un Client Component (`"use client"`) qui fetch côté client. Les pages publiques (accueil, liste des marchés, détail d'un marché) sont des Server Components qui fetchent directement l'API côté serveur.
 
+## Internationalisation (FR/EN/ES/DE)
+
+`src/lib/i18n/` contient un dictionnaire par langue (`fr.ts` canonique — définit le type `TranslationKey`
+— puis `en.ts`/`es.ts`/`de.ts`, chacun typé `Record<TranslationKey, string>` : impossible de merger une
+traduction incomplète, TypeScript refuse de compiler si une clé manque ou est en trop dans l'une des
+quatre langues). `src/lib/language-context.tsx` (`LanguageProvider`/`useLanguage()`) suit le même
+patron que `theme-context.tsx` — persisté dans `localStorage` (`epimarket-language`), démarre à `"fr"`
+côté serveur pour éviter un mismatch d'hydratation, corrigé après montage.
+
+`useLanguage()` expose `t(key, vars?)` (interpolation `{nom}` dans les chaînes) et `tp(key, count, vars?)`
+qui choisit `${key}.one`/`${key}.other` selon `count` (pluriel façon anglais : singulier seulement à
+exactement 1). `src/lib/i18n/index.ts` fournit aussi `categoryKey()`/`ticketStatusKey()` (mappent les
+enums Prisma vers une clé de traduction) et `localeFor(language)` (code BCP-47 pour `toLocaleDateString`).
+
+Les messages d'erreur renvoyés par l'API sont toujours en anglais (voir `apps/api`) ; `errorMessage(err, t)`
+dans `lib/api.ts` les fait correspondre à une clé `errors.*` via `apiErrorKey()` avant de les traduire — un
+message backend inconnu de la table retombe sur l'anglais brut plutôt que de planter.
+
+**Portée volontairement limitée à l'espace public/utilisateur** : l'espace admin (`app/admin/**`,
+`components/market-form.tsx`) reste **en français uniquement**, jamais vu par un visiteur externe ou le
+jury. Ses appels à `errorMessage()` passent `frT` (un raccourci `(key) => translate("fr", key)` exporté
+par `lib/i18n/index.ts`) plutôt qu'un vrai `t()` issu de `useLanguage()`.
+
+**Pourquoi certaines pages publiques ont un composant `*-content.tsx` séparé** : `page.tsx` (accueil),
+`marches/page.tsx`, `marches/[id]/page.tsx` et `classement/page.tsx` restent des Server Components qui
+fetchent côté serveur (pas de changement d'architecture pour l'i18n) — mais le texte affiché doit réagir
+au changement de langue en direct, ce qui demande `useLanguage()`, un hook client. Chacune délègue donc
+son rendu à un Client Component homonyme (`components/home-content.tsx`, `marches-content.tsx`,
+`market-detail-content.tsx`, `classement-content.tsx`) qui reçoit les données déjà fetchées en props.
+
+`components/language-switcher.tsx` (`variant="compact"` dans le header, `variant="full"` dans le pied de
+page) est le seul endroit qui appelle `setLanguage()`.
+
 ## Structure des pages
 
 ```
@@ -51,6 +84,8 @@ src/app/
 - `components/stat-carousel.tsx` — carousel glissable (souris ou tactile) entre les 4 statistiques de l'accueil, chacune dans sa propre couleur (palette catégorielle validée avec le skill dataviz).
 - `components/animated-number.tsx` — anime un nombre affiché d'une valeur à l'autre (count-up), utilisé pour tous les gros chiffres (KPI, stats de profil).
 - `components/theme-toggle.tsx` + `lib/theme-context.tsx` — bascule clair/sombre, sans flash au chargement (script inline dans `layout.tsx` qui pose `data-theme` avant l'hydratation).
+- `components/language-switcher.tsx` + `lib/language-context.tsx` — sélecteur FR/EN/ES/DE, voir la section Internationalisation plus haut.
+- `components/footer.tsx` — pied de page (catégories de marchés, liens réels du site, lien vers le dépôt GitHub, mention légale/pédagogique, sélecteur de langue) rendu dans `layout.tsx` sur toutes les pages, y compris admin.
 - `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin. Le type (`BINARY`/`MULTI`) ne se choisit qu'à la création ; pour `MULTI`, une liste dynamique de libellés d'options (3 à 6) remplace les champs OUI/NON, et le nombre d'options est verrouillé une fois le marché créé (fixé on-chain). À la création, un 4ᵉ slot par défaut est pré-rempli avec "Autre" (aucun traitement spécial ailleurs dans le code — c'est une option comme les autres, le règlement pari-mutuel ne distingue pas son `optionId`) ; `addOption()` insère les nouveaux slots juste avant elle pour qu'elle reste toujours en dernière position.
 - `components/admin-stats.tsx` — bandeau de compteurs globaux en haut des pages admin (`GET /users/stats`).
 - `lib/bet-stats.ts` — calcule les statistiques de la page Profil (taux de réussite, P&L, répartition par catégorie, historique) à partir de la liste brute des paris de l'utilisateur.

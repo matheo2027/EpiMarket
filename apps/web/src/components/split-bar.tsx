@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatedNumber } from "@/components/animated-number";
+import { useLanguage } from "@/lib/language-context";
 
 type SplitBarProps = {
   yesPrice: number;
@@ -10,6 +11,7 @@ type SplitBarProps = {
 };
 
 export function SplitBar({ yesPrice, size = "sm", animateIn = false }: SplitBarProps) {
+  const { t } = useLanguage();
   const targetYesPct = Math.round(yesPrice * 100);
   const [animatedYesPct, setAnimatedYesPct] = useState(50);
 
@@ -39,10 +41,10 @@ export function SplitBar({ yesPrice, size = "sm", animateIn = false }: SplitBarP
       </div>
       <div className={`mt-1.5 flex items-center justify-between font-mono tabular-nums ${labelSize}`}>
         <span className="text-yes">
-          OUI <AnimatedNumber value={targetYesPct} format={(n) => `${Math.round(n)}%`} />
+          {t("betForm.yes")} <AnimatedNumber value={targetYesPct} format={(n) => `${Math.round(n)}%`} />
         </span>
         <span className="text-no">
-          NON <AnimatedNumber value={100 - targetYesPct} format={(n) => `${Math.round(n)}%`} />
+          {t("betForm.no")} <AnimatedNumber value={100 - targetYesPct} format={(n) => `${Math.round(n)}%`} />
         </span>
       </div>
     </div>

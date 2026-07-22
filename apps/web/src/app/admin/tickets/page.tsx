@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { truncateHash } from "@/lib/format";
 import type { Ticket, TicketStatus } from "@/lib/types";
@@ -28,7 +29,7 @@ function TicketRow({ ticket, onChanged }: { ticket: Ticket; onChanged: () => voi
       await apiFetch(`/tickets/${ticket.id}`, { method: "PATCH", token, body: { status, adminNote } });
       onChanged();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusy(false);
     }
@@ -90,7 +91,7 @@ export default function AdminTicketsPage() {
     if (!token) return;
     apiFetch<{ tickets: Ticket[] }>("/tickets?all=true", { token })
       .then((data) => setTickets(data.tickets))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, frT)));
   }, [token]);
 
   useEffect(() => {

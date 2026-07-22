@@ -15,6 +15,7 @@ Ce guide explique comment utiliser le site, côté visiteur/parieur et côté ad
 - [Signaler un problème](#signaler-un-problème)
 - [Espace administrateur](#espace-administrateur)
 - [Questions fréquentes](#questions-fréquentes)
+- [Le pied de page](#le-pied-de-page)
 
 ---
 
@@ -27,6 +28,8 @@ Une fois inscrit, vous êtes connecté automatiquement. Pour vous reconnecter pl
 Mot de passe oublié ? Le lien **Mot de passe oublié ?** sur la page de connexion mène à un formulaire où entrer votre email génère un lien de réinitialisation. Ce projet n'envoie pas de vrais emails : le lien s'affiche directement sur la page au lieu d'être envoyé — cliquez dessus pour choisir un nouveau mot de passe. Il expire au bout d'une heure et ne peut servir qu'une fois.
 
 Le bouton **Déconnexion** dans le header met fin à la session sur cet appareil.
+
+Le site est disponible en **français, anglais, espagnol et allemand** : un sélecteur de langue se trouve dans le header et dans le pied de page. Le choix est mémorisé sur cet appareil (pas besoin de le refaire à chaque visite). L'espace administrateur reste uniquement en français.
 
 ---
 
@@ -202,3 +205,9 @@ Le pari a perdu — vous n'avez pas récupéré votre mise. C'est différent d'u
 
 **J'ai un message d'erreur qui parle d'une transaction mais mon pari n'apparaît pas, que faire ?**
 Utilisez la page **Support** pour créer un ticket — le hash de transaction de l'erreur est repris automatiquement si vous y arrivez via le lien affiché dans le message d'erreur. Un admin pourra vérifier la transaction et resynchroniser votre compte si besoin.
+
+---
+
+## Le pied de page
+
+En bas de chaque page, un pied de page reprend les catégories de marchés (lien direct vers `/marches` filtré sur cette catégorie), les liens utiles du site (Marchés, Classement, Support, Comment ça fonctionne, Connexion/Créer un compte), un lien vers le code source du projet, et une mention rappelant que ce projet est un exercice pédagogique Epitech à portefeuille entièrement virtuel. Le sélecteur de langue s'y trouve aussi, à côté du sélecteur déjà présent dans le header.

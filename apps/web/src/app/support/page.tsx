@@ -4,13 +4,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, type SubmitEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { localeFor, ticketStatusKey } from "@/lib/i18n";
 import type { Ticket } from "@/lib/types";
-import { TICKET_STATUS_LABELS } from "@/lib/types";
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
-}
 
 function statusTone(status: Ticket["status"]) {
   if (status === "RESOLVED") return "text-yes";
@@ -19,22 +16,29 @@ function statusTone(status: Ticket["status"]) {
 }
 
 function TicketRow({ ticket }: { ticket: Ticket }) {
+  const { language, t } = useLanguage();
+  const formattedDate = new Date(ticket.createdAt).toLocaleDateString(localeFor(language), {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-paper">{ticket.subject}</p>
         <span className={`font-mono text-xs font-semibold ${statusTone(ticket.status)}`}>
-          {TICKET_STATUS_LABELS[ticket.status]}
+          {t(ticketStatusKey(ticket.status))}
         </span>
       </div>
       <p className="text-sm text-muted">{ticket.message}</p>
       {ticket.adminNote && (
         <p className="rounded-lg bg-surface-raised px-3 py-2 text-xs text-muted">
-          <span className="font-semibold text-paper">Réponse admin : </span>
+          <span className="font-semibold text-paper">{t("support.adminReply")}</span>
           {ticket.adminNote}
         </p>
       )}
-      <p className="font-mono text-xs text-muted">{formatDate(ticket.createdAt)}</p>
+      <p className="font-mono text-xs text-muted">{formattedDate}</p>
     </div>
   );
 }
@@ -49,12 +53,13 @@ export default function SupportPage() {
 
 function SupportPageContent() {
   const { user, token, loading } = useAuth();
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
 
-  const [subject, setSubject] = useState(() => (searchParams.get("txHash") ? "Problème avec un pari" : ""));
+  const [subject, setSubject] = useState(() => (searchParams.get("txHash") ? t("support.defaultSubject") : ""));
   const [message, setMessage] = useState(() => {
     const txHash = searchParams.get("txHash");
-    return txHash ? `Mon pari a été placé on-chain (tx ${txHash}) mais n'apparaît pas dans mon portefeuille.` : "";
+    return txHash ? t("support.defaultMessage", { txHash }) : "";
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +70,8 @@ function SupportPageContent() {
     if (!token) return;
     apiFetch<{ tickets: Ticket[] }>("/tickets", { token })
       .then((data) => setTickets(data.tickets))
-      .catch((err) => setError(errorMessage(err)));
-  }, [token]);
+      .catch((err) => setError(errorMessage(err, t)));
+  }, [token, t]);
 
   useEffect(() => {
     loadTickets();
@@ -88,12 +93,12 @@ function SupportPageContent() {
           marketId: searchParams.get("marketId") ?? undefined,
         },
       });
-      setSuccess("Ticket envoyé, un admin va le traiter.");
+      setSuccess(t("support.ticketSent"));
       setSubject("");
       setMessage("");
       loadTickets();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -106,9 +111,9 @@ function SupportPageContent() {
       <div className="mx-auto max-w-md px-6 py-24 text-center">
         <p className="text-muted">
           <Link href="/connexion" className="text-brand hover:underline">
-            Connectez-vous
-          </Link>{" "}
-          pour signaler un problème.
+            {t("support.loginPrompt")}
+          </Link>
+          {t("support.loginSuffix")}
         </p>
       </div>
     );
@@ -116,12 +121,12 @@ function SupportPageContent() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Support</h1>
-      <p className="mt-2 text-sm text-muted">Un problème de solde, un pari qui n&apos;apparaît pas ? Décrivez-le ici.</p>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("support.title")}</h1>
+      <p className="mt-2 text-sm text-muted">{t("support.subtitle")}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Sujet</span>
+          <span className="text-sm font-medium text-muted">{t("support.subject")}</span>
           <input
             type="text"
             required
@@ -132,7 +137,7 @@ function SupportPageContent() {
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Message</span>
+          <span className="text-sm font-medium text-muted">{t("support.message")}</span>
           <textarea
             required
             rows={4}
@@ -152,14 +157,14 @@ function SupportPageContent() {
           disabled={submitting}
           className="self-start rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
         >
-          {submitting ? "Envoi…" : "Envoyer"}
+          {submitting ? t("support.sending") : t("support.send")}
         </button>
       </form>
 
-      <h2 className="mt-10 font-display text-lg font-semibold tracking-tight">Mes tickets</h2>
+      <h2 className="mt-10 font-display text-lg font-semibold tracking-tight">{t("support.myTickets")}</h2>
       <div className="mt-4 flex flex-col gap-3">
-        {tickets === null && <p className="py-8 text-center text-sm text-muted">Chargement…</p>}
-        {tickets?.length === 0 && <p className="py-8 text-center text-sm text-muted">Aucun ticket pour l&apos;instant.</p>}
+        {tickets === null && <p className="py-8 text-center text-sm text-muted">{t("common.loading")}</p>}
+        {tickets?.length === 0 && <p className="py-8 text-center text-sm text-muted">{t("support.noTickets")}</p>}
         {tickets?.map((ticket) => (
           <TicketRow key={ticket.id} ticket={ticket} />
         ))}

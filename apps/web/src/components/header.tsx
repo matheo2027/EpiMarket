@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { HelpModal } from "@/components/help-modal";
 
 function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
@@ -22,6 +24,7 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
 
 export function Header() {
   const { user, loading, logout } = useAuth();
+  const { t } = useLanguage();
   const pathname = usePathname();
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -37,24 +40,25 @@ export function Header() {
         </Link>
 
         <nav className="hidden items-center gap-1 rounded-full border border-line bg-surface-raised p-1 sm:flex">
-          <NavLink href="/marches" label="Marchés" active={pathname.startsWith("/marches")} />
-          <NavLink href="/classement" label="Classement" active={pathname.startsWith("/classement")} />
+          <NavLink href="/marches" label={t("header.markets")} active={pathname.startsWith("/marches")} />
+          <NavLink href="/classement" label={t("header.leaderboard")} active={pathname.startsWith("/classement")} />
           {user && user.role !== "ADMIN" && (
-            <NavLink href="/portefeuille" label="Profil" active={pathname.startsWith("/portefeuille")} />
+            <NavLink href="/portefeuille" label={t("header.profile")} active={pathname.startsWith("/portefeuille")} />
           )}
           {user && user.role !== "ADMIN" && (
-            <NavLink href="/support" label="Support" active={pathname.startsWith("/support")} />
+            <NavLink href="/support" label={t("header.support")} active={pathname.startsWith("/support")} />
           )}
           {user?.role === "ADMIN" && (
-            <NavLink href="/admin" label="Admin" active={pathname.startsWith("/admin")} />
+            <NavLink href="/admin" label={t("header.admin")} active={pathname.startsWith("/admin")} />
           )}
         </nav>
 
         <div className="flex shrink-0 items-center gap-2">
+          <LanguageSwitcher />
           <button
             onClick={() => setHelpOpen(true)}
-            aria-label="Comment ça fonctionne"
-            title="Comment ça fonctionne"
+            aria-label={t("header.howItWorks")}
+            title={t("header.howItWorks")}
             className="flex h-7 w-7 items-center justify-center rounded-full border border-line text-sm font-semibold text-muted transition-colors hover:border-brand hover:text-paper"
           >
             ?
@@ -71,7 +75,7 @@ export function Header() {
                 onClick={logout}
                 className="rounded-full border border-line px-3.5 py-1.5 text-sm font-medium text-paper transition-colors hover:border-brand"
               >
-                Déconnexion
+                {t("header.logout")}
               </button>
             </>
           ) : (
@@ -80,13 +84,13 @@ export function Header() {
                 href="/connexion"
                 className="hidden text-sm font-medium text-muted transition-colors hover:text-paper sm:inline"
               >
-                Connexion
+                {t("header.login")}
               </Link>
               <Link
                 href="/inscription"
                 className="rounded-full bg-paper px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand"
               >
-                Créer un compte
+                {t("header.createAccount")}
               </Link>
             </>
           )}

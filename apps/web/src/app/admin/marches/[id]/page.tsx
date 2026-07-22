@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { MarketForm, type MarketFormValues } from "@/components/market-form";
 import type { Market } from "@/lib/types";
@@ -23,7 +24,7 @@ export default function EditMarketPage() {
   useEffect(() => {
     apiFetch<{ market: Market }>(`/markets/${params.id}`)
       .then((data) => setMarket(data.market))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, frT)));
   }, [params.id]);
 
   async function handleSubmit(values: MarketFormValues) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
 import type { Role, User } from "@/lib/types";
@@ -30,7 +31,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
       setRole("USER");
       onCreated();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setSubmitting(false);
     }
@@ -111,7 +112,7 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
       setEditing(false);
       onChanged();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusy(false);
     }
@@ -131,7 +132,7 @@ function UserRow({ user, onChanged }: { user: User; onChanged: () => void }) {
       await apiFetch(`/users/${user.id}`, { method: "DELETE", token });
       onChanged();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setBusy(false);
     }
@@ -211,7 +212,7 @@ export default function AdminUsersPage() {
     if (!token) return;
     apiFetch<{ users: User[] }>("/users", { token })
       .then((data) => setUsers(data.users))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, frT)));
   }, [token]);
 
   useEffect(() => {

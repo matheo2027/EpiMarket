@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { truncateHash } from "@/lib/format";
 import { optionTone } from "@/lib/option-tones";
@@ -20,7 +21,7 @@ export default function AdminBetsPage() {
     if (!token) return;
     apiFetch<{ bets: Bet[] }>("/bets?all=true", { token })
       .then((data) => setBets(data.bets))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, frT)));
   }, [token]);
 
   useEffect(() => {

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { useLanguage } from "@/lib/language-context";
 
 export default function MotDePasseOubliePage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [resetLink, setResetLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export default function MotDePasseOubliePage() {
       });
       setResetLink(`/reinitialiser-mot-de-passe?token=${data.resetToken}`);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -29,17 +31,12 @@ export default function MotDePasseOubliePage() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Mot de passe oublié</h1>
-      <p className="mt-2 text-sm text-muted">
-        Entrez votre email pour générer un lien de réinitialisation.
-      </p>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("forgotPassword.title")}</h1>
+      <p className="mt-2 text-sm text-muted">{t("forgotPassword.subtitle")}</p>
 
       {resetLink ? (
         <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-brand/30 bg-brand-soft p-5">
-          <p className="text-sm text-paper">
-            Ce projet n&apos;envoie pas de vrais emails : voici directement votre lien de
-            réinitialisation (en production, il serait envoyé par email).
-          </p>
+          <p className="text-sm text-paper">{t("forgotPassword.noEmailNotice")}</p>
           <Link href={resetLink} className="break-all text-sm font-medium text-brand hover:underline">
             {resetLink}
           </Link>
@@ -47,7 +44,7 @@ export default function MotDePasseOubliePage() {
       ) : (
         <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-muted">Email</span>
+            <span className="text-sm font-medium text-muted">{t("auth.email")}</span>
             <input
               type="email"
               required
@@ -66,14 +63,14 @@ export default function MotDePasseOubliePage() {
             disabled={submitting}
             className="mt-2 rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
           >
-            {submitting ? "Envoi…" : "Générer le lien"}
+            {submitting ? t("forgotPassword.submitting") : t("forgotPassword.submit")}
           </button>
         </form>
       )}
 
       <p className="mt-6 text-sm text-muted">
         <Link href="/connexion" className="text-brand hover:underline">
-          ← Retour à la connexion
+          {t("forgotPassword.backToLogin")}
         </Link>
       </p>
     </div>

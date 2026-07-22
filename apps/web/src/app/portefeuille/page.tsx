@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
+import { useLanguage } from "@/lib/language-context";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { localeFor } from "@/lib/i18n";
 import type { Bet } from "@/lib/types";
 import { CategoryBadge } from "@/components/category-badge";
 import { truncateHash } from "@/lib/format";
@@ -16,10 +18,6 @@ import { optionTone } from "@/lib/option-tones";
 
 type Tab = "ongoing" | "past";
 
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 function tabClass(active: boolean) {
   return `rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
     active ? "border-brand bg-brand/10 text-brand" : "border-line text-muted hover:text-paper"
@@ -28,6 +26,7 @@ function tabClass(active: boolean) {
 
 function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) => void }) {
   const { token, refreshUser } = useAuth();
+  const { language, t } = useLanguage();
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,16 +35,24 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
   const payout = bet.payout !== null ? Number(bet.payout) : null;
   const isMulti = bet.side === null;
   const sideColor = isMulti ? optionTone(bet.option?.sortOrder ?? 0).text : bet.side === "YES" ? "text-yes" : "text-no";
-  const sideLabel = isMulti ? (bet.option?.label ?? "—") : bet.side === "YES" ? "OUI" : "NON";
+  const sideLabel = isMulti ? (bet.option?.label ?? "—") : bet.side === "YES" ? t("betForm.yes") : t("betForm.no");
   const canWithdraw = market?.status === "OPEN" && payout === null && !bet.withdrawnAt;
+  const formattedDate = new Date(bet.createdAt).toLocaleDateString(localeFor(language), {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
   async function handleWithdraw(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
     const ok = await confirm({
-      title: "Retirer ce pari",
-      message: `Retirer votre mise de ${Number(bet.amount).toFixed(2)} € sur « ${market?.title ?? "ce marché"} » ? Vous récupérez exactement votre mise — ni gain, ni perte.`,
-      confirmLabel: "Retirer",
+      title: t("profile.withdrawConfirmTitle"),
+      message: t("profile.withdrawConfirmMessage", {
+        amount: `${Number(bet.amount).toFixed(2)} €`,
+        title: market?.title ?? "",
+      }),
+      confirmLabel: t("profile.withdrawConfirmLabel"),
     });
     if (!ok) return;
     setBusy(true);
@@ -55,7 +62,7 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
       onWithdrawn(data.bet);
       await refreshUser();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setBusy(false);
     }
@@ -71,8 +78,8 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
           {market && <CategoryBadge category={market.category} />}
           <span className={`font-mono text-xs font-semibold ${sideColor}`}>{sideLabel}</span>
         </div>
-        <p className="text-sm text-paper">{market?.title ?? "Marché"}</p>
-        <p className="font-mono text-xs text-muted">{formatDate(bet.createdAt)}</p>
+        <p className="text-sm text-paper">{market?.title ?? "—"}</p>
+        <p className="font-mono text-xs text-muted">{formattedDate}</p>
         {bet.txHash && (
           <p className="font-mono text-[11px] text-muted" title={bet.txHash}>
             tx {truncateHash(bet.txHash)}
@@ -83,13 +90,19 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-6 font-mono text-sm tabular-nums">
           <div>
-            <p className="text-xs text-muted">Mise</p>
+            <p className="text-xs text-muted">{t("profile.stake")}</p>
             <p className="text-paper">{Number(bet.amount).toFixed(2)} €</p>
           </div>
           <div>
-            <p className="text-xs text-muted">{bet.withdrawnAt ? "Retiré" : payout === null ? "Statut" : "Gain"}</p>
+            <p className="text-xs text-muted">
+              {bet.withdrawnAt ? t("profile.withdrawn") : payout === null ? t("profile.status") : t("profile.gain")}
+            </p>
             <p className={bet.withdrawnAt || payout === null ? "text-muted" : payout > 0 ? "text-yes" : "text-no"}>
-              {bet.withdrawnAt ? `${Number(bet.amount).toFixed(2)} €` : payout === null ? "En attente" : `${payout.toFixed(2)} €`}
+              {bet.withdrawnAt
+                ? `${Number(bet.amount).toFixed(2)} €`
+                : payout === null
+                  ? t("profile.pending")
+                  : `${payout.toFixed(2)} €`}
             </p>
           </div>
         </div>
@@ -100,7 +113,7 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
             disabled={busy}
             className="shrink-0 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-no hover:text-no disabled:opacity-50"
           >
-            {busy ? "…" : "Retirer"}
+            {busy ? t("profile.withdrawing") : t("profile.withdraw")}
           </button>
         )}
       </div>
@@ -110,6 +123,7 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
 
 export default function PortefeuillePage() {
   const { user, token, loading } = useAuth();
+  const { t } = useLanguage();
   const [tab, setTab] = useState<Tab>("ongoing");
   const [allBets, setAllBets] = useState<Bet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,8 +132,8 @@ export default function PortefeuillePage() {
     if (!token) return;
     apiFetch<{ bets: Bet[] }>("/bets", { token })
       .then((data) => setAllBets(data.bets))
-      .catch((err) => setError(errorMessage(err)));
-  }, [token]);
+      .catch((err) => setError(errorMessage(err, t)));
+  }, [token, t]);
 
   const bets = useMemo(() => {
     if (!allBets) return null;
@@ -138,9 +152,9 @@ export default function PortefeuillePage() {
       <div className="mx-auto max-w-md px-6 py-24 text-center">
         <p className="text-muted">
           <Link href="/connexion" className="text-brand hover:underline">
-            Connectez-vous
-          </Link>{" "}
-          pour voir votre portefeuille.
+            {t("profile.loginPrompt")}
+          </Link>
+          {t("profile.loginSuffix")}
         </p>
       </div>
     );
@@ -149,21 +163,21 @@ export default function PortefeuillePage() {
   if (user.role === "ADMIN") {
     return (
       <div className="mx-auto max-w-md px-6 py-24 text-center">
-        <p className="text-muted">Les administrateurs n&apos;ont pas de portefeuille.</p>
+        <p className="text-muted">{t("profile.adminNoWallet")}</p>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Profil</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("profile.title")}</h1>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface p-6">
-        <p className="text-sm text-muted">Solde disponible</p>
+        <p className="text-sm text-muted">{t("profile.availableBalance")}</p>
         <p className="mt-2 font-mono text-4xl tabular-nums text-paper">{Number(user.walletBalance).toFixed(2)} €</p>
         {user.walletAddress && (
           <p className="mt-3 font-mono text-xs text-muted" title={user.walletAddress}>
-            Adresse on-chain : {truncateHash(user.walletAddress)}
+            {t("profile.onChainAddress", { address: truncateHash(user.walletAddress) })}
           </p>
         )}
       </div>
@@ -173,7 +187,7 @@ export default function PortefeuillePage() {
           <ProfileStats stats={stats} />
           <PnlChart points={stats.history} />
           <div>
-            <h2 className="font-display text-lg font-semibold tracking-tight">Répartition par catégorie</h2>
+            <h2 className="font-display text-lg font-semibold tracking-tight">{t("profile.categoryBreakdown")}</h2>
             <div className="mt-3">
               <CategoryBreakdown breakdown={stats.categoryBreakdown} />
             </div>
@@ -183,19 +197,19 @@ export default function PortefeuillePage() {
 
       <div className="mt-8 flex gap-2">
         <button onClick={() => setTab("ongoing")} className={tabClass(tab === "ongoing")}>
-          En cours
+          {t("profile.tabOngoing")}
         </button>
         <button onClick={() => setTab("past")} className={tabClass(tab === "past")}>
-          Passés
+          {t("profile.tabPast")}
         </button>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
         {error && <p className="text-sm text-no">{error}</p>}
-        {bets === null && !error && <p className="py-8 text-center text-sm text-muted">Chargement…</p>}
+        {bets === null && !error && <p className="py-8 text-center text-sm text-muted">{t("common.loading")}</p>}
         {bets !== null && bets.length === 0 && (
           <p className="py-8 text-center text-sm text-muted">
-            {tab === "ongoing" ? "Aucun pari en cours." : "Aucun pari passé."}
+            {tab === "ongoing" ? t("profile.noOngoingBets") : t("profile.noPastBets")}
           </p>
         )}
         {bets?.map((bet) => (

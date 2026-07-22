@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AdminGuideContent, UserGuideContent } from "@/components/help-content";
+import { useLanguage } from "@/lib/language-context";
 
 export function HelpModal({
   open,
@@ -12,6 +13,8 @@ export function HelpModal({
   onClose: () => void;
   variant: "user" | "admin";
 }) {
+  const { t } = useLanguage();
+
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -23,6 +26,8 @@ export function HelpModal({
 
   if (!open) return null;
 
+  const title = variant === "admin" ? "Fonctionnement — Administration" : t("help.title");
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/70 px-4 py-10 backdrop-blur-sm sm:py-16"
@@ -31,17 +36,15 @@ export function HelpModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={variant === "admin" ? "Fonctionnement — Administration" : "Comment ça fonctionne"}
+        aria-label={title}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-2xl rounded-2xl border border-line bg-surface p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)] sm:p-8"
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 className="font-display text-xl font-semibold tracking-tight text-paper">
-            {variant === "admin" ? "Fonctionnement — Administration" : "Comment ça fonctionne"}
-          </h2>
+          <h2 className="font-display text-xl font-semibold tracking-tight text-paper">{title}</h2>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("help.close")}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line text-muted transition-colors hover:border-brand hover:text-paper"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">

@@ -2,6 +2,7 @@
 
 import { useState, type SubmitEvent } from "react";
 import { errorMessage } from "@/lib/api";
+import { frT } from "@/lib/i18n";
 import { CATEGORY_LABELS, type MarketCategory, type MarketType } from "@/lib/types";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as MarketCategory[];
@@ -69,7 +70,7 @@ export function MarketForm({
     try {
       await onSubmit(values);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, frT));
     } finally {
       setSubmitting(false);
     }

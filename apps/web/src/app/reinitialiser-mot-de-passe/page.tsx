@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
+import { useLanguage } from "@/lib/language-context";
 
 export default function ReinitialiserMotDePassePage() {
   return (
@@ -14,6 +15,7 @@ export default function ReinitialiserMotDePassePage() {
 }
 
 function ReinitialiserMotDePasseContent() {
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") ?? "";
 
@@ -28,7 +30,7 @@ function ReinitialiserMotDePasseContent() {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+      setError(t("resetPassword.mismatch"));
       return;
     }
 
@@ -37,7 +39,7 @@ function ReinitialiserMotDePasseContent() {
       await apiFetch("/auth/reset-password", { method: "POST", body: { token, newPassword: password } });
       setSuccess(true);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -45,27 +47,27 @@ function ReinitialiserMotDePasseContent() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Réinitialiser le mot de passe</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("resetPassword.title")}</h1>
 
       {success ? (
         <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-yes/30 bg-yes-soft p-5">
-          <p className="text-sm text-paper">Votre mot de passe a été mis à jour.</p>
+          <p className="text-sm text-paper">{t("resetPassword.success")}</p>
           <Link href="/connexion" className="text-sm font-medium text-brand hover:underline">
-            Se connecter →
+            {t("resetPassword.loginLink")}
           </Link>
         </div>
       ) : !token ? (
         <p className="mt-8 rounded-lg border border-no/30 bg-no-soft px-3.5 py-2.5 text-sm text-no">
-          Lien de réinitialisation manquant ou invalide.{" "}
+          {t("resetPassword.missingToken")}{" "}
           <Link href="/mot-de-passe-oublie" className="underline">
-            Demander un nouveau lien
+            {t("resetPassword.requestNewLink")}
           </Link>
           .
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-muted">Nouveau mot de passe</span>
+            <span className="text-sm font-medium text-muted">{t("resetPassword.newPassword")}</span>
             <input
               type="password"
               required
@@ -77,7 +79,7 @@ function ReinitialiserMotDePasseContent() {
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-muted">Confirmer le mot de passe</span>
+            <span className="text-sm font-medium text-muted">{t("resetPassword.confirmPassword")}</span>
             <input
               type="password"
               required
@@ -97,7 +99,7 @@ function ReinitialiserMotDePasseContent() {
             disabled={submitting}
             className="mt-2 rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
           >
-            {submitting ? "Mise à jour…" : "Réinitialiser"}
+            {submitting ? t("resetPassword.submitting") : t("resetPassword.submit")}
           </button>
         </form>
       )}

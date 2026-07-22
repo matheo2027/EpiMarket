@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type SubmitEvent } from "react";
 import { apiFetch, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 import { truncateHash } from "@/lib/format";
 import { optionTone } from "@/lib/option-tones";
 import type { Bet, BetSide, Market } from "@/lib/types";
@@ -37,6 +38,7 @@ function estimateOptionPayout(market: Market, optionId: string | null, amount: n
 
 export function BetForm({ market }: { market: Market }) {
   const { user, token, refreshUser } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const sortedOptions = [...(market.options ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   const [side, setSide] = useState<BetSide>("YES");
@@ -49,7 +51,7 @@ export function BetForm({ market }: { market: Market }) {
   if (market.status !== "OPEN") {
     return (
       <div className="rounded-2xl border border-line bg-surface p-5">
-        <p className="text-sm text-muted">Ce marché est résolu, les paris sont fermés.</p>
+        <p className="text-sm text-muted">{t("betForm.resolvedNotice")}</p>
       </div>
     );
   }
@@ -59,9 +61,9 @@ export function BetForm({ market }: { market: Market }) {
       <div className="rounded-2xl border border-line bg-surface p-5">
         <p className="text-sm text-muted">
           <Link href="/connexion" className="text-brand hover:underline">
-            Connectez-vous
-          </Link>{" "}
-          pour placer un pari sur ce marché.
+            {t("betForm.loginPrompt")}
+          </Link>
+          {t("betForm.loginSuffix")}
         </p>
       </div>
     );
@@ -70,7 +72,7 @@ export function BetForm({ market }: { market: Market }) {
   if (user.role === "ADMIN") {
     return (
       <div className="rounded-2xl border border-line bg-surface p-5">
-        <p className="text-sm text-muted">Les administrateurs ne peuvent pas placer de paris.</p>
+        <p className="text-sm text-muted">{t("betForm.adminCantBet")}</p>
       </div>
     );
   }
@@ -82,6 +84,7 @@ export function BetForm({ market }: { market: Market }) {
     : estimatePayout(market, side, numericAmount);
   const selectedOption = sortedOptions.find((o) => o.id === optionId);
   const failedTxHash = error?.match(/tx (0x[a-fA-F0-9]+)/)?.[1] ?? null;
+  const sideLabel = side === "YES" ? t("betForm.yes") : t("betForm.no");
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
@@ -89,11 +92,11 @@ export function BetForm({ market }: { market: Market }) {
     setSuccess(null);
 
     if (!numericAmount || numericAmount <= 0) {
-      setError("Entrez un montant valide.");
+      setError(t("betForm.invalidAmountError"));
       return;
     }
     if (isMulti && !optionId) {
-      setError("Choisissez une option.");
+      setError(t("betForm.chooseOptionError"));
       return;
     }
 
@@ -105,13 +108,13 @@ export function BetForm({ market }: { market: Market }) {
         body: isMulti ? { marketId: market.id, optionId, amount: numericAmount } : { marketId: market.id, side, amount: numericAmount },
       });
       const txSuffix = data.bet.txHash ? ` (tx ${truncateHash(data.bet.txHash)})` : "";
-      const targetLabel = isMulti ? selectedOption?.label : side === "YES" ? "OUI" : "NON";
-      setSuccess(`Pari placé : ${numericAmount} € sur ${targetLabel}.${txSuffix}`);
+      const targetLabel = isMulti ? (selectedOption?.label ?? "") : sideLabel;
+      setSuccess(`${t("betForm.betPlaced", { amount: `${numericAmount} €`, label: targetLabel })}${txSuffix}`);
       setAmount("");
       await refreshUser();
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -148,7 +151,7 @@ export function BetForm({ market }: { market: Market }) {
               side === "YES" ? "border-yes bg-yes-soft text-yes" : "border-line text-muted hover:text-paper"
             }`}
           >
-            OUI · {Math.round(market.yesPrice * 100)}%
+            {t("betForm.yes")} · {Math.round(market.yesPrice * 100)}%
           </button>
           <button
             type="button"
@@ -157,13 +160,13 @@ export function BetForm({ market }: { market: Market }) {
               side === "NO" ? "border-no bg-no-soft text-no" : "border-line text-muted hover:text-paper"
             }`}
           >
-            NON · {Math.round(market.noPrice * 100)}%
+            {t("betForm.no")} · {Math.round(market.noPrice * 100)}%
           </button>
         </div>
       )}
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-muted">Montant (€)</span>
+        <span className="text-sm font-medium text-muted">{t("betForm.amount")}</span>
         <input
           type="number"
           min={1}
@@ -176,12 +179,12 @@ export function BetForm({ market }: { market: Market }) {
       </label>
 
       <div className="flex items-center justify-between rounded-lg bg-surface-raised px-3.5 py-2.5 text-sm">
-        <span className="text-muted">Gain estimé si {isMulti ? (selectedOption?.label ?? "—") : side === "YES" ? "OUI" : "NON"}</span>
+        <span className="text-muted">
+          {t("betForm.estimatedPayoutIf", { label: isMulti ? (selectedOption?.label ?? "—") : sideLabel })}
+        </span>
         <span className="font-mono tabular-nums text-paper">{estimatedPayout.toFixed(2)} €</span>
       </div>
-      <p className="text-xs text-muted">
-        Estimation au prix actuel — le montant réel dépend des paris placés avant la clôture du marché.
-      </p>
+      <p className="text-xs text-muted">{t("betForm.estimateDisclaimer")}</p>
 
       {error && (
         <div className="rounded-lg border border-no/30 bg-no-soft px-3.5 py-2.5 text-sm text-no">
@@ -191,7 +194,7 @@ export function BetForm({ market }: { market: Market }) {
               href={`/support?txHash=${failedTxHash}&marketId=${market.id}`}
               className="mt-1.5 inline-block font-medium underline"
             >
-              Créer un ticket →
+              {t("betForm.createTicket")}
             </Link>
           )}
         </div>
@@ -205,11 +208,11 @@ export function BetForm({ market }: { market: Market }) {
         disabled={submitting}
         className="rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
       >
-        {submitting ? "Envoi…" : "Placer le pari"}
+        {submitting ? t("betForm.sending") : t("betForm.placeBet")}
       </button>
 
       <p className="text-center font-mono text-xs tabular-nums text-muted">
-        Solde : {Number(user.walletBalance).toFixed(2)} €
+        {t("common.balance")} : {Number(user.walletBalance).toFixed(2)} €
       </p>
     </form>
   );

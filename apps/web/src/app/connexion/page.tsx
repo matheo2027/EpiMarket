@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState, type SubmitEvent } from "react";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useLanguage } from "@/lib/language-context";
 
 export default function ConnexionPage() {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +24,7 @@ export default function ConnexionPage() {
       await login(email, password);
       router.push("/");
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -30,12 +32,12 @@ export default function ConnexionPage() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col px-6 py-20">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Connexion</h1>
-      <p className="mt-2 text-sm text-muted">Accédez à votre portefeuille et vos paris.</p>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{t("auth.loginTitle")}</h1>
+      <p className="mt-2 text-sm text-muted">{t("auth.loginSubtitle")}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-muted">Email</span>
+          <span className="text-sm font-medium text-muted">{t("auth.email")}</span>
           <input
             type="email"
             required
@@ -47,9 +49,9 @@ export default function ConnexionPage() {
 
         <label className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted">Mot de passe</span>
+            <span className="text-sm font-medium text-muted">{t("auth.password")}</span>
             <Link href="/mot-de-passe-oublie" className="text-xs text-brand hover:underline">
-              Mot de passe oublié ?
+              {t("auth.forgotPassword")}
             </Link>
           </div>
           <input
@@ -70,14 +72,14 @@ export default function ConnexionPage() {
           disabled={submitting}
           className="mt-2 rounded-full bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-brand disabled:opacity-50"
         >
-          {submitting ? "Connexion…" : "Se connecter"}
+          {submitting ? t("auth.submittingLogin") : t("auth.submitLogin")}
         </button>
       </form>
 
       <p className="mt-6 text-sm text-muted">
-        Pas encore de compte ?{" "}
+        {t("auth.noAccount")}{" "}
         <Link href="/inscription" className="text-brand hover:underline">
-          Créer un compte
+          {t("auth.createAccountLink")}
         </Link>
       </p>
     </div>

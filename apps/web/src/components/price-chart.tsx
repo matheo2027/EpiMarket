@@ -4,6 +4,8 @@ import { useId, useMemo, useState, type MouseEvent } from "react";
 import type { PricePoint } from "@/lib/types";
 import { ChartArrowButton } from "@/components/chart-arrow-button";
 import { useHoldRepeat } from "@/lib/use-hold-repeat";
+import { useLanguage } from "@/lib/language-context";
+import { localeFor } from "@/lib/i18n";
 
 const WIDTH = 640;
 const HEIGHT = 220;
@@ -15,11 +17,10 @@ const INNER_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT;
 const INNER_HEIGHT = HEIGHT - PAD_TOP - PAD_BOTTOM;
 const GRID_LEVELS = [0, 25, 50, 75, 100];
 
-function formatDay(t: number) {
-  return new Date(t).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
-}
-
 export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
+  const { language, t } = useLanguage();
+  const formatDay = (time: number) =>
+    new Date(time).toLocaleDateString(localeFor(language), { day: "2-digit", month: "short" });
   const yesGradientId = useId();
   const noGradientId = useId();
   const [pinnedIndex, setPinnedIndex] = useState(pricePoints.length - 1);
@@ -42,8 +43,8 @@ export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
   if (points.length < 2) {
     return (
       <div className="flex h-56 flex-col items-center justify-center rounded-2xl border border-line bg-surface text-center">
-        <p className="text-sm text-muted">Pas encore d&apos;historique de prix.</p>
-        <p className="mt-1 text-xs text-muted">Soyez le premier à parier sur ce marché.</p>
+        <p className="text-sm text-muted">{t("marketDetail.noPriceHistory")}</p>
+        <p className="mt-1 text-xs text-muted">{t("marketDetail.beFirstToBet")}</p>
       </div>
     );
   }
@@ -83,21 +84,21 @@ export function PriceChart({ pricePoints }: { pricePoints: PricePoint[] }) {
     <div className="rounded-2xl border border-line bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-wide text-muted">Évolution du prix</p>
+          <p className="font-mono text-xs uppercase tracking-wide text-muted">{t("marketDetail.priceEvolution")}</p>
           <div className="mt-1 flex items-baseline gap-4">
             <p className="font-mono text-3xl tabular-nums text-yes sm:text-4xl">{current.yes.toFixed(0)}%</p>
             <p className="font-mono text-3xl tabular-nums text-no sm:text-4xl">{current.no.toFixed(0)}%</p>
           </div>
           <div className="mt-1 flex items-center gap-3 font-mono text-[11px] text-muted">
             <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-yes" /> OUI
+              <span className="h-1.5 w-1.5 rounded-full bg-yes" /> {t("betForm.yes")}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-no" /> NON
+              <span className="h-1.5 w-1.5 rounded-full bg-no" /> {t("betForm.no")}
             </span>
           </div>
         </div>
-        <p className="font-mono text-xs text-muted">{isLatest ? "aujourd'hui" : formatDay(current.t)}</p>
+        <p className="font-mono text-xs text-muted">{isLatest ? t("marketDetail.today") : formatDay(current.t)}</p>
       </div>
 
       <svg
