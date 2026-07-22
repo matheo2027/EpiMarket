@@ -208,12 +208,14 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
   (voir `POST /tickets`). Un revert Solidity (solde insuffisant, marché fermé...) devient un 400 avec le
   message du contrat.
 - `POST /bets/:id/withdraw` — annule un pari **avant résolution** (propriétaire uniquement, marché
-  encore `OPEN`, pari pas déjà réglé). Rembourse l'intégralité de la mise — ce n'est pas une vente au
-  prix du marché courant, juste l'inverse de `placeBet`/`placeMultiBet` (voir
-  `apps/blockchain/README.md`). Même mécanique de synchro que `POST /bets` (transaction on-chain
-  d'abord, puis Postgres, avec le même filet de sécurité `txHash` en cas d'échec de synchro). `payout`
-  est mis à `amount` (remboursement complet) et `withdrawnAt` posé ; `POST /markets/:id/resolve` ignore
-  ensuite ce pari dans son calcul (sinon la relecture du contrat écraserait le remboursement avec le
+  encore `OPEN`, pari pas déjà réglé). Refusé aussi dans les **5 heures précédant `market.endDate`**
+  (`WITHDRAWAL_CUTOFF_MS` dans `src/routes/bets.ts`) — vérifié côté API uniquement, comme la fenêtre de
+  pari `startDate`/`endDate` juste au-dessus : le contrat Solidity n'a aucune notion de dates. Rembourse
+  l'intégralité de la mise — ce n'est pas une vente au prix du marché courant, juste l'inverse de
+  `placeBet`/`placeMultiBet` (voir `apps/blockchain/README.md`). Même mécanique de synchro que
+  `POST /bets` (transaction on-chain d'abord, puis Postgres, avec le même filet de sécurité `txHash` en
+  cas d'échec de synchro). `payout` est mis à `amount` (remboursement complet) et `withdrawnAt` posé ;
+  `POST /markets/:id/resolve` ignore ensuite ce pari dans son calcul (sinon la relecture du contrat écraserait le remboursement avec le
   payout à 0 jamais touché par `resolveMarket` pour un pari retiré).
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus

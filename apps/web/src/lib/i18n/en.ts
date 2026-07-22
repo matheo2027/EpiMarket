@@ -230,7 +230,7 @@ export const en: Record<TranslationKey, string> = {
   "help.markets.multi": "Multiple options (e.g. \"who wins the tournament?\"): one row per option with its percentage. Only one side can win.",
   "help.markets.chart": "In both cases, a price history chart shows how the odds moved over time.",
   "help.section.bet": "Placing a bet",
-  "help.bet": "Choose your side (or option), an amount, and an estimated payout shows before you confirm. It's not guaranteed: others can still bet before the close. Betting is only possible on an open market, within its active period, and with a sufficient balance. You can withdraw it as long as the market isn't resolved (full refund, from your Profile).",
+  "help.bet": "Choose your side (or option), an amount, and an estimated payout shows before you confirm. It's not guaranteed: others can still bet before the close. Betting is only possible on an open market, within its active period, and with a sufficient balance. You can withdraw it up until 5 hours before the market closes (full refund, from your Profile).",
   "help.section.profile": "The Profile",
   "help.profile": "Balance, on-chain wallet address, and stats: win rate, net gains/losses, current exposure (stake on not-yet-resolved bets, counted separately), a cumulative P&L curve, and a breakdown by category. Below, your bet history (ongoing / past), each with its on-chain transaction hash. An ongoing bet has a Withdraw button — cancels the bet and refunds the stake, no gain or loss.",
   "help.section.classement": "The Leaderboard",
@@ -284,5 +284,6 @@ export const en: Record<TranslationKey, string> = {
   "errors.notAllowedWithdraw": "You're not allowed to withdraw this bet.",
   "errors.notYourBet": "This bet doesn't belong to you.",
   "errors.betAlreadyWithdrawn": "This bet has already been withdrawn.",
+  "errors.withdrawalCutoff": "Withdrawals are no longer possible within 5 hours of the market's close.",
   "errors.generic": "Something went wrong.",
 };

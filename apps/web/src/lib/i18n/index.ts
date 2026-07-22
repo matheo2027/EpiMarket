@@ -93,6 +93,7 @@ const API_ERROR_KEYS: Record<string, TranslationKey> = {
   "Not allowed to withdraw this bet": "errors.notAllowedWithdraw",
   "Not your bet": "errors.notYourBet",
   "Bet already withdrawn": "errors.betAlreadyWithdrawn",
+  "Withdrawals close 5 hours before the market's end date": "errors.withdrawalCutoff",
 };
 
 export function apiErrorKey(rawMessage: string): TranslationKey | null {

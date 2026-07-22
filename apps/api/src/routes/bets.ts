@@ -16,6 +16,13 @@ import { fromChainAmount, toChainAmount } from "../blockchain/units.js";
 
 export const betsRouter = Router();
 
+// No withdrawal in the last stretch before a market's official close — same
+// rationale as a real order book pulling liquidity near settlement, kept
+// simple as a flat cutoff rather than a dynamic one. Enforced here (API),
+// not in the Solidity contract, matching the existing startDate/endDate
+// betting-window check below (the contract has no notion of dates at all).
+const WITHDRAWAL_CUTOFF_MS = 5 * 60 * 60 * 1000;
+
 betsRouter.post("/", requireAuth, async (req, res) => {
   const { marketId, side, optionId, amount } = req.body ?? {};
 
@@ -232,6 +239,10 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
   }
   if (bet.market.status !== "OPEN") {
     res.status(400).json({ error: "Market is not open for betting" });
+    return;
+  }
+  if (bet.market.endDate.getTime() - Date.now() < WITHDRAWAL_CUTOFF_MS) {
+    res.status(400).json({ error: "Withdrawals close 5 hours before the market's end date" });
     return;
   }
   if (bet.withdrawnAt || bet.payout !== null) {
