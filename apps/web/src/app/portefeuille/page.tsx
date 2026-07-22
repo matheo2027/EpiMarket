@@ -18,6 +18,17 @@ import { optionTone } from "@/lib/option-tones";
 
 type Tab = "ongoing" | "past";
 
+// Mirrors the API's WITHDRAWAL_CUTOFF_MS (apps/api/src/routes/bets.ts) — kept
+// as a plain top-level function (not inline in the component) since it calls
+// the impure Date.now(), which the React Compiler lint forbids directly
+// inside a component's own render body.
+const WITHDRAWAL_CUTOFF_MS = 5 * 60 * 60 * 1000;
+function canWithdraw(bet: Bet): boolean {
+  const market = bet.market;
+  if (market?.status !== "OPEN" || bet.payout !== null || bet.withdrawnAt) return false;
+  return new Date(market.endDate).getTime() - Date.now() >= WITHDRAWAL_CUTOFF_MS;
+}
+
 function tabClass(active: boolean) {
   return `rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
     active ? "border-brand bg-brand/10 text-brand" : "border-line text-muted hover:text-paper"
@@ -36,7 +47,7 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
   const isMulti = bet.side === null;
   const sideColor = isMulti ? optionTone(bet.option?.sortOrder ?? 0).text : bet.side === "YES" ? "text-yes" : "text-no";
   const sideLabel = isMulti ? (bet.option?.label ?? "—") : bet.side === "YES" ? t("betForm.yes") : t("betForm.no");
-  const canWithdraw = market?.status === "OPEN" && payout === null && !bet.withdrawnAt;
+  const withdrawable = canWithdraw(bet);
   const formattedDate = new Date(bet.createdAt).toLocaleDateString(localeFor(language), {
     day: "2-digit",
     month: "short",
@@ -106,7 +117,7 @@ function BetRow({ bet, onWithdrawn }: { bet: Bet; onWithdrawn: (updated: Bet) =>
             </p>
           </div>
         </div>
-        {canWithdraw && (
+        {withdrawable && (
           <button
             type="button"
             onClick={handleWithdraw}

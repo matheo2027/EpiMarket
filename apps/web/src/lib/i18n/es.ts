@@ -230,7 +230,7 @@ export const es: Record<TranslationKey, string> = {
   "help.markets.multi": "Opciones múltiples (ej. \"¿quién gana el torneo?\"): una fila por opción con su porcentaje. Solo un lado puede ganar.",
   "help.markets.chart": "En ambos casos, un gráfico de evolución del precio muestra cómo se ha movido la cuota en el tiempo.",
   "help.section.bet": "Hacer una apuesta",
-  "help.bet": "Elige tu lado (u opción), un importe, y una ganancia estimada se muestra antes de confirmar. No está garantizada: otras personas pueden seguir apostando antes del cierre. Solo se puede apostar en un mercado abierto, dentro de su periodo activo, y con saldo suficiente. Puedes retirarla mientras el mercado no esté resuelto (reembolso íntegro, desde tu Perfil).",
+  "help.bet": "Elige tu lado (u opción), un importe, y una ganancia estimada se muestra antes de confirmar. No está garantizada: otras personas pueden seguir apostando antes del cierre. Solo se puede apostar en un mercado abierto, dentro de su periodo activo, y con saldo suficiente. Puedes retirarla hasta 5 horas antes del cierre del mercado (reembolso íntegro, desde tu Perfil).",
   "help.section.profile": "El Perfil",
   "help.profile": "Saldo, dirección del monedero on-chain, y estadísticas: tasa de acierto, ganancias/pérdidas netas, exposición actual (apuesta en las que aún no se han resuelto, contada aparte), una curva de ganancias/pérdidas acumuladas, y un desglose por categoría. Debajo, el historial de apuestas (en curso / pasadas), cada una con el hash de su transacción on-chain. Una apuesta en curso tiene un botón Retirar — cancela la apuesta y reembolsa la apuesta, sin ganancia ni pérdida.",
   "help.section.classement": "La Clasificación",
@@ -284,5 +284,6 @@ export const es: Record<TranslationKey, string> = {
   "errors.notAllowedWithdraw": "No tienes permiso para retirar esta apuesta.",
   "errors.notYourBet": "Esta apuesta no te pertenece.",
   "errors.betAlreadyWithdrawn": "Esta apuesta ya ha sido retirada.",
+  "errors.withdrawalCutoff": "El retiro ya no es posible en las 5 horas previas al cierre del mercado.",
   "errors.generic": "Ha ocurrido un error.",
 };

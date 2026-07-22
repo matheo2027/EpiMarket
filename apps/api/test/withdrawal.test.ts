@@ -55,6 +55,25 @@ describe("bet withdrawal", () => {
     expect(Number(restoredOption.pool)).toBeCloseTo(Number(option.pool), 1);
   });
 
+  it("rejects withdrawing within 5 hours of the market's close", async () => {
+    const admin = await createAdmin();
+    const bettor = await registerUser("lastminute");
+    const market = await createBinaryMarket(admin.token, {
+      endDate: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const bet = await request(app)
+      .post("/bets")
+      .set("Authorization", `Bearer ${bettor.token}`)
+      .send({ marketId: market.id, side: "YES", amount: 50 });
+
+    const res = await request(app)
+      .post(`/bets/${bet.body.bet.id}/withdraw`)
+      .set("Authorization", `Bearer ${bettor.token}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/5 hours/i);
+  });
+
   it("rejects withdrawing someone else's bet", async () => {
     const admin = await createAdmin();
     const bettor = await registerUser("owner3");

@@ -230,7 +230,7 @@ export const de: Record<TranslationKey, string> = {
   "help.markets.multi": "Mehrere Optionen (z. B. \"wer gewinnt das Turnier?\"): eine Zeile pro Option mit ihrem Prozentsatz. Nur eine Seite kann gewinnen.",
   "help.markets.chart": "In beiden Fällen zeigt ein Kursverlaufsdiagramm, wie sich die Quote im Laufe der Zeit bewegt hat.",
   "help.section.bet": "Eine Wette platzieren",
-  "help.bet": "Wählen Sie Ihre Seite (oder Option), einen Betrag, und ein geschätzter Gewinn wird vor der Bestätigung angezeigt. Er ist nicht garantiert: andere können vor Marktschluss noch wetten. Wetten ist nur auf einem offenen Markt möglich, innerhalb seines aktiven Zeitraums und mit ausreichendem Guthaben. Sie können sie zurückziehen, solange der Markt nicht abgeschlossen ist (vollständige Rückerstattung, über Ihr Profil).",
+  "help.bet": "Wählen Sie Ihre Seite (oder Option), einen Betrag, und ein geschätzter Gewinn wird vor der Bestätigung angezeigt. Er ist nicht garantiert: andere können vor Marktschluss noch wetten. Wetten ist nur auf einem offenen Markt möglich, innerhalb seines aktiven Zeitraums und mit ausreichendem Guthaben. Sie können sie bis 5 Stunden vor Marktschluss zurückziehen (vollständige Rückerstattung, über Ihr Profil).",
   "help.section.profile": "Das Profil",
   "help.profile": "Guthaben, On-Chain-Wallet-Adresse und Statistiken: Erfolgsquote, Netto-Gewinne/-Verluste, aktuelles Risiko (Einsatz auf noch nicht abgeschlossene Wetten, gesondert gezählt), eine Kurve der kumulierten Gewinne/Verluste, und eine Aufschlüsselung nach Kategorie. Darunter der Wettverlauf (laufend / vergangen), jeweils mit dem Hash der On-Chain-Transaktion. Eine laufende Wette hat eine Schaltfläche „Zurückziehen“ — bricht die Wette ab und erstattet den Einsatz, ohne Gewinn oder Verlust.",
   "help.section.classement": "Die Bestenliste",
@@ -284,5 +284,6 @@ export const de: Record<TranslationKey, string> = {
   "errors.notAllowedWithdraw": "Sie dürfen diese Wette nicht zurückziehen.",
   "errors.notYourBet": "Diese Wette gehört nicht Ihnen.",
   "errors.betAlreadyWithdrawn": "Diese Wette wurde bereits zurückgezogen.",
+  "errors.withdrawalCutoff": "Ein Rückzug ist innerhalb von 5 Stunden vor Marktschluss nicht mehr möglich.",
   "errors.generic": "Es ist ein Fehler aufgetreten.",
 };
