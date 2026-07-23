@@ -218,6 +218,8 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
   `POST /markets/:id/resolve` ignore ensuite ce pari dans son calcul (sinon la relecture du contrat écraserait le remboursement avec le
   payout à 0 jamais touché par `resolveMarket` pour un pari retiré).
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
+- `GET /bets?marketId=` — les paris de l'utilisateur connecté sur un marché précis (utilisé par la section
+  « Vos paris sur ce marché » de la page de détail, voir `apps/web/README.md`) ; combinable avec `status`
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).

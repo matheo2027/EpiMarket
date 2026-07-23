@@ -345,13 +345,14 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
 });
 
 betsRouter.get("/", requireAuth, async (req, res) => {
-  const { status, all } = req.query;
+  const { status, all, marketId } = req.query;
 
   const isAdminAll = all === "true" && (await currentUserRole(req.user!.userId)) === "ADMIN";
 
   const where: Prisma.BetWhereInput = isAdminAll ? {} : { userId: req.user!.userId };
   if (status === "ongoing") where.market = { status: "OPEN" };
   else if (status === "past") where.market = { status: "RESOLVED" };
+  if (typeof marketId === "string") where.marketId = marketId;
 
   const bets = isAdminAll
     ? await prisma.bet.findMany({

@@ -90,6 +90,8 @@ Un pari ne peut être placé que si le marché est **ouvert** et dans sa **péri
 
 Changé d'avis ? Vous pouvez **retirer** un pari en cours depuis votre Profil, jusqu'à **5 heures avant la clôture** du marché — voir la section suivante.
 
+Sous le formulaire de pari, une section **« Vos paris sur ce marché »** liste vos paris déjà placés sur ce marché précis, avec le même bouton **Retirer** — pratique pour changer d'avis juste après avoir parié, sans changer de page.
+
 ---
 
 ## Le Profil

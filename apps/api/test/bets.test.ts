@@ -67,4 +67,27 @@ describe("bets", () => {
     const asAdmin = await request(app).get(`/bets/${bet.body.bet.id}`).set("Authorization", `Bearer ${admin.token}`);
     expect(asAdmin.status).toBe(200);
   });
+
+  it("GET /bets?marketId= only returns the caller's bets on that market", async () => {
+    const admin = await createAdmin();
+    const bettor = await registerUser("marketscoped");
+    const marketA = await createBinaryMarket(admin.token);
+    const marketB = await createBinaryMarket(admin.token);
+
+    await request(app)
+      .post("/bets")
+      .set("Authorization", `Bearer ${bettor.token}`)
+      .send({ marketId: marketA.id, side: "YES", amount: 10 })
+      .expect(201);
+    await request(app)
+      .post("/bets")
+      .set("Authorization", `Bearer ${bettor.token}`)
+      .send({ marketId: marketB.id, side: "NO", amount: 20 })
+      .expect(201);
+
+    const res = await request(app).get(`/bets?marketId=${marketA.id}`).set("Authorization", `Bearer ${bettor.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.bets).toHaveLength(1);
+    expect(res.body.bets[0].marketId).toBe(marketA.id);
+  });
 });
