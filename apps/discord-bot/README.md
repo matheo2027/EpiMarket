@@ -10,8 +10,9 @@ dans son propre salon :
 
 Les deux tournent comme services Docker séparés (`discord-bot` et `bets-bot` dans `docker-compose.yml`),
 avec deux applications/tokens Discord distincts (permissions minimales : chaque bot n'a besoin d'accès
-qu'à son propre salon), mais partagent le code HTTP bas niveau (`src/httpClient.ts`) et le même secret
-interne (`INTERNAL_API_SECRET`) pour parler à l'API.
+qu'à son propre salon). Ils partagent le code HTTP bas niveau (`src/httpClient.ts`), mais **pas** le
+secret interne : chacun a le sien (`INTERNAL_API_SECRET_MODERATION` / `INTERNAL_API_SECRET_BETS`), voir
+[Sécurité : qui peut cliquer les boutons](#sécurité--qui-peut-cliquer-les-boutons) plus bas.
 
 ## Bot de modération des propositions de marché
 
@@ -30,8 +31,9 @@ Hardhat).
 ### Architecture : polling, pas de webhook entrant
 
 Le bot n'a **aucun accès direct à Postgres** (Prisma reste centralisé dans `apps/api`) et n'expose aucun
-port entrant. Il communique avec l'API uniquement en HTTP sortant, via un secret partagé
-(`X-Internal-Secret` / `INTERNAL_API_SECRET`, voir `requireInternal`/`requireAdminOrInternal` côté API) :
+port entrant. Il communique avec l'API uniquement en HTTP sortant, via un secret propre à ce bot
+(`X-Internal-Secret` / `INTERNAL_API_SECRET_MODERATION`, voir `requireInternalSecret`/
+`requireAdminOrInternalSecret` côté API) :
 
 - **Nouvelles propositions → Discord** : `pollLoop.ts` interroge `GET /market-proposals/pending-unnotified`
   toutes les `POLL_INTERVAL_MS` (5s par défaut), poste un embed avec deux boutons (`approve:<id>` /
@@ -53,7 +55,7 @@ planter ou de créer un second marché — nécessaire puisque les deux clics pe
 ### Sécurité : qui peut cliquer les boutons
 
 La frontière de sécurité principale reste l'appartenance au serveur Discord (censé n'avoir que des
-admins comme membres) — le secret partagé n'authentifie que le bot lui-même, pas la personne qui clique.
+admins comme membres) — le secret interne n'authentifie que le bot lui-même, pas la personne qui clique.
 En complément (défense en profondeur, pas un remplacement) :
 
 - `interactions.ts` vérifie `interaction.memberPermissions.has(PermissionFlagsBits.Administrator)` avant
@@ -62,6 +64,11 @@ En complément (défense en profondeur, pas un remplacement) :
 - Le pseudo Discord de la personne qui a cliqué (`interaction.user.tag`) est transmis à l'API et stocké
   dans `MarketProposal.decidedBy` (`discord:<pseudo>` plutôt que le générique `"discord-bot"`) — pour
   savoir après coup qui a pris quelle décision, que ce soit depuis Discord ou depuis le site.
+- **Secret interne propre à ce bot** (`INTERNAL_API_SECRET_MODERATION`, distinct de celui du bot paris) :
+  `requireInternalSecret`/`requireAdminOrInternalSecret` côté API (`apps/api/src/middleware/auth.ts`)
+  prennent le nom de la variable à vérifier en paramètre plutôt qu'un secret global unique — si ce bot
+  est un jour compromis, le secret volé ne débloque que les routes `/market-proposals/*`, pas
+  `/bets/*`.
 
 ### Fichiers
 
@@ -92,8 +99,8 @@ Même principe de polling que le bot de modération, mais à sens unique (pas de
 ### Fichiers
 
 - `src/bets-bot/env.ts` — variables d'environnement propres à ce bot (`BETS_DISCORD_BOT_TOKEN`,
-  `BETS_DISCORD_CHANNEL_ID`) + celles partagées avec le bot de modération (`API_BASE_URL`,
-  `INTERNAL_API_SECRET`, `POLL_INTERVAL_MS`).
+  `BETS_DISCORD_CHANNEL_ID`, `INTERNAL_API_SECRET_BETS` — ce dernier distinct de celui du bot de
+  modération, voir la section Sécurité plus haut) + celles partagées (`API_BASE_URL`, `POLL_INTERVAL_MS`).
 - `src/bets-bot/apiClient.ts` — client HTTP vers `/bets/unnotified` et `/bets/:id/notify`.
 - `src/bets-bot/embeds.ts` — embed "pari placé" / "pari retiré".
 - `src/bets-bot/pollLoop.ts` — la boucle de polling.
@@ -112,7 +119,8 @@ Définies dans le `.env` à la racine du repo (lues par `docker-compose.yml`, se
 | `DISCORD_CHANNEL_ID` | Modération | Salon où poster les propositions. |
 | `BETS_DISCORD_BOT_TOKEN` | Paris | Token du bot paris — **application Discord séparée**, voir plus bas. |
 | `BETS_DISCORD_CHANNEL_ID` | Paris | Salon où annoncer les paris. |
-| `INTERNAL_API_SECRET` | Les deux | Doit être **identique** à celui d'`apps/api/.env`. |
+| `INTERNAL_API_SECRET_MODERATION` | Modération | Doit correspondre à la valeur du même nom dans `apps/api/.env`. **Propre à ce bot** — pas celui du bot paris. |
+| `INTERNAL_API_SECRET_BETS` | Paris | Doit correspondre à la valeur du même nom dans `apps/api/.env`. **Propre à ce bot** — pas celui du bot de modération. |
 | `DISCORD_BOT_API_BASE_URL` | Les deux | Base URL de l'API vue depuis les conteneurs — `http://host.docker.internal:4000` par défaut, nécessaire car `apps/api` tourne nativement sur l'hôte (pas dans Docker), donc `localhost` depuis un conteneur pointerait sur le conteneur lui-même. |
 | `POLL_INTERVAL_MS` | Les deux | Intervalle de polling, 5000 par défaut. |
 
@@ -132,8 +140,10 @@ besoin de voir le salon de modération, et inversement) :
    Discord) si le serveur a d'autres salons.
 4. Dans Discord : activer le **mode développeur** (Paramètres → Avancés), clic droit sur le salon cible →
    **Copier l'ID du salon** → `DISCORD_CHANNEL_ID` ou `BETS_DISCORD_CHANNEL_ID` selon le bot.
-5. `INTERNAL_API_SECRET` est **partagé** entre les deux bots et l'API — à générer une seule fois
-   (ex. `openssl rand -hex 32`), même valeur dans le `.env` racine et dans `apps/api/.env`.
+5. Générer **deux** secrets internes distincts (ex. `openssl rand -hex 32` deux fois) — un
+   `INTERNAL_API_SECRET_MODERATION` et un `INTERNAL_API_SECRET_BETS`, chacun mis à la même valeur dans le
+   `.env` racine et dans `apps/api/.env`. Volontairement pas partagés : un secret compromis ne débloque
+   que les routes de son propre bot (voir la section Sécurité plus haut).
 
 ## Lancer
 

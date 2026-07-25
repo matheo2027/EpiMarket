@@ -303,5 +303,6 @@ export const de: Record<TranslationKey, string> = {
   "errors.notYourBet": "Diese Wette gehört nicht Ihnen.",
   "errors.betAlreadyWithdrawn": "Diese Wette wurde bereits zurückgezogen.",
   "errors.withdrawalCutoff": "Ein Rückzug ist innerhalb von 5 Stunden vor Marktschluss nicht mehr möglich.",
+  "errors.blockchainNotReady": "Die Blockchain startet noch, bitte versuche es gleich noch einmal.",
   "errors.generic": "Es ist ein Fehler aufgetreten.",
 };

@@ -2,10 +2,14 @@ import type { Request, Response } from "express";
 import { Router } from "express";
 import { MarketProposalStatus } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { currentUserRole, requireAdminOrInternal, requireAuth, requireInternal } from "../middleware/auth.js";
+import { currentUserRole, requireAdminOrInternalSecret, requireAuth, requireInternalSecret } from "../middleware/auth.js";
 import { createMarketFromFields, optionsOrder, serializeMarket, validateMarketInput } from "../marketCreation.js";
 
 export const marketProposalsRouter = Router();
+
+const MODERATION_SECRET_VAR = "INTERNAL_API_SECRET_MODERATION";
+const requireInternal = requireInternalSecret(MODERATION_SECRET_VAR);
+const requireAdminOrInternal = requireAdminOrInternalSecret(MODERATION_SECRET_VAR);
 
 async function findProposalOr404(res: Response, id: string) {
   const proposal = await prisma.marketProposal.findUnique({ where: { id } });

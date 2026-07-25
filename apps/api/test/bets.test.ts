@@ -4,7 +4,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createAdmin, createBinaryMarket, registerUser, resetDb } from "./helpers.js";
 
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET!;
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET_BETS!;
 
 describe("bets", () => {
   beforeEach(resetDb);
@@ -99,6 +99,12 @@ describe("bets", () => {
 
     const wrong = await request(app).get("/bets/unnotified").set("X-Internal-Secret", "nope");
     expect(wrong.status).toBe(401);
+  });
+
+  it("rejects the moderation bot's secret on the bets feed — each bot's secret only unlocks its own routes", async () => {
+    const moderationSecret = process.env.INTERNAL_API_SECRET_MODERATION!;
+    const crossSecret = await request(app).get("/bets/unnotified").set("X-Internal-Secret", moderationSecret);
+    expect(crossSecret.status).toBe(401);
   });
 
   it("feeds a newly placed bet once, then stops listing it once marked notified", async () => {

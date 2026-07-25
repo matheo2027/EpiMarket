@@ -94,6 +94,7 @@ const API_ERROR_KEYS: Record<string, TranslationKey> = {
   "Not your bet": "errors.notYourBet",
   "Bet already withdrawn": "errors.betAlreadyWithdrawn",
   "Withdrawals close 5 hours before the market's end date": "errors.withdrawalCutoff",
+  "The blockchain is still starting up, please try again in a moment.": "errors.blockchainNotReady",
 };
 
 export function apiErrorKey(rawMessage: string): TranslationKey | null {

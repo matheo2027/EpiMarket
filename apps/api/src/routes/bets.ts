@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { type BetSide, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { currentUserRole, requireAuth, requireInternal } from "../middleware/auth.js";
+import { currentUserRole, requireAuth, requireInternalSecret } from "../middleware/auth.js";
 import { computeOptionPrices, computePrices } from "../pricing.js";
 import {
+  BLOCKCHAIN_NOT_READY_MESSAGE,
   getOnChainBalance,
   getReadOnlyContract,
   getUserContract,
+  isContractDeployed,
   readPlacedBetIndex,
   revertReason,
   sideToOutcome,
@@ -15,6 +17,8 @@ import { runAsSender } from "../blockchain/provider.js";
 import { fromChainAmount, toChainAmount } from "../blockchain/units.js";
 
 export const betsRouter = Router();
+
+const requireInternal = requireInternalSecret("INTERNAL_API_SECRET_BETS");
 
 // No withdrawal in the last stretch before a market's official close — same
 // rationale as a real order book pulling liquidity near settlement, kept
@@ -32,6 +36,10 @@ betsRouter.post("/", requireAuth, async (req, res) => {
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     res.status(400).json({ error: "amount must be a positive number" });
+    return;
+  }
+  if (!(await isContractDeployed())) {
+    res.status(503).json({ error: BLOCKCHAIN_NOT_READY_MESSAGE, retryable: true });
     return;
   }
 
@@ -247,6 +255,10 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
   }
   if (bet.withdrawnAt || bet.payout !== null) {
     res.status(400).json({ error: "Bet already settled" });
+    return;
+  }
+  if (!(await isContractDeployed())) {
+    res.status(503).json({ error: BLOCKCHAIN_NOT_READY_MESSAGE, retryable: true });
     return;
   }
 
