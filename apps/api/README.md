@@ -7,7 +7,7 @@ Backend Express/TypeScript. La base de données est PostgreSQL, accédée via [P
 Deux fichiers `.env` distincts :
 
 - **`.env` à la racine du repo** — identifiants PostgreSQL utilisés par `docker-compose.yml` pour créer le conteneur (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`).
-- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS) et les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas).
+- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS), les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas), et `INTERNAL_API_SECRET` (secret partagé avec le bot Discord, voir `apps/discord-bot/README.md`).
 
 Si tu changes les identifiants dans le `.env` racine, mets à jour `DATABASE_URL` dans `apps/api/.env` en conséquence.
 
@@ -29,7 +29,7 @@ npm run test:watch
 
 Tests d'intégration (Vitest + Supertest) : ils tapent l'app Express réelle (`src/app.ts`, importée sans
 `app.listen` — pas de port à libérer) et le vrai contrat sur le nœud Hardhat déjà lancé en dev, sans
-mocker la blockchain. Base dédiée `polymarket_test` (même conteneur Postgres, `apps/api/.env.test`,
+mocker la blockchain. Base dédiée `epimarket_test` (même conteneur Postgres, `apps/api/.env.test`,
 gitignored comme `.env`) : `npm test` applique d'abord les migrations dessus (`pretest`), donc jamais de
 risque de toucher aux données de dev. Chaque fichier réinitialise les tables avant chaque test
 (`test/helpers.ts#resetDb`) ; les fichiers tournent en séquence, pas en parallèle
@@ -41,8 +41,16 @@ Couverture actuelle (`test/*.test.ts`) : auth (inscription, doublons, login, `/a
 de mot de passe), marchés (création admin-only, recherche/tri, cycle complet pari→résolution→payout en
 BINARY et en MULTI, fenêtre de pari), paris (solde insuffisant, admin qui ne peut pas parier, permissions
 de lecture), retrait de pari avant résolution (remboursement, double-retrait refusé, exclusion correcte
-du calcul de résolution), favoris, commentaires, classement. Pas exhaustif (pas de couverture
-tickets/diagnostics/admin utilisateurs pour l'instant) — un premier passage, à étendre au fil de l'eau.
+du calcul de résolution), favoris, commentaires, classement, propositions de marché (soumission,
+approbation/rejet admin et via le secret interne du bot, idempotence, listing propre à l'utilisateur vs
+`?all=true` admin, cycle notify/sync utilisé par le bot), tickets (création liée à un pari/marché,
+permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), CRUD utilisateurs
+(création avec/sans wallet selon le rôle, doublons, permissions, suppression bloquée si l'utilisateur a
+déjà parié ou si c'est son propre compte admin, stats globales), diagnostics (détection d'un marché
+BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, et
+les trois actions de resynchronisation correspondantes — désynchronisations simulées par une écriture
+Postgres directe, en contournant volontairement les routes qui gardent normalement base et chaîne
+synchronisées, pour reproduire ce qui se passe réellement lors d'un redémarrage de la chaîne Hardhat).
 
 ## Schéma
 
@@ -165,6 +173,28 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 | `betId`         | `String?`      | FK optionnelle vers `Bet`, si le ticket concerne un pari précis  |
 | `marketId`      | `String?`      | FK optionnelle vers `Market`                                    |
 
+### `MarketProposal`
+
+Un marché proposé par un utilisateur, en attente de modération (par un admin depuis le site, ou via les
+boutons du bot Discord — voir `apps/discord-bot/README.md`). Mêmes champs qu'un `Market` en brouillon
+(pas encore de vraies lignes `MarketOption`/pools/prix, juste `optionLabels: String[]` pour une
+proposition `MULTI`), plus le suivi de la décision et de la synchronisation Discord.
+
+| Champ                          | Type                   | Notes                                                        |
+| ------------------------------- | ----------------------- | -------------------------------------------------------------- |
+| `id`                              | `String`                | cuid                                                            |
+| `title`/`description`/`category`/`startDate`/`endDate`/`type`/`yesDescription`/`noDescription` | — | mêmes règles de validation que `POST /markets` (`validateMarketInput` dans `src/marketCreation.ts`, partagée entre les deux routes) |
+| `optionLabels`                    | `String[]`              | libellés d'options pour une proposition `MULTI` — tableau Postgres natif, pas de table à part tant que ce n'est qu'un brouillon |
+| `status`                          | `MarketProposalStatus`  | `PENDING` \| `APPROVED` \| `REJECTED`                            |
+| `adminNote`                       | `String?`                | note laissée par l'admin (raison de rejet, ou juste un commentaire) |
+| `decidedBy`                       | `String?`                | `"user:<id>"` (décision web) ou `"discord:<pseudo Discord>"` (décision via un bouton Discord, pseudo transmis par le bot) — `"discord-bot"` en repli si le bot n'a pas transmis de pseudo |
+| `decidedAt`                       | `DateTime?`              |                                                                  |
+| `proposerId`                      | `String`                 | FK vers `User`                                                  |
+| `marketId`                        | `String?`                | FK vers `Market` une fois approuvée (`@unique` — une proposition ne crée jamais deux marchés, voir logique d'idempotence plus bas) |
+| `discordMessageId`/`discordChannelId` | `String?`            | posés par `PATCH /market-proposals/:id/notify` une fois le message Discord envoyé |
+| `notifiedAt`                      | `DateTime?`              | `null` tant que le bot n'a pas encore posté le message          |
+| `discordSyncedAt`                 | `DateTime?`              | `null` tant que Discord ne reflète pas encore la décision finale |
+
 ## Routes
 
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
@@ -218,6 +248,8 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
   `POST /markets/:id/resolve` ignore ensuite ce pari dans son calcul (sinon la relecture du contrat écraserait le remboursement avec le
   payout à 0 jamais touché par `resolveMarket` pour un pari retiré).
 - `GET /bets?status=ongoing|past` — historique des paris de l'utilisateur connecté, filtrable par marché en cours (`OPEN`) ou passé (`RESOLVED`)
+- `GET /bets?marketId=` — les paris de l'utilisateur connecté sur un marché précis (utilisé par la section
+  « Vos paris sur ce marché » de la page de détail, voir `apps/web/README.md`) ; combinable avec `status`
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
@@ -232,6 +264,24 @@ Un signalement de problème créé par un utilisateur (ex. solde qui ne correspo
 - `GET /tickets` — les tickets de l'utilisateur connecté ; `GET /tickets?all=true` (admin) — tous les tickets, avec l'auteur.
 - `GET /tickets/:id` — un ticket (propriétaire ou admin).
 - `PATCH /tickets/:id` — (admin) changer le `status` et/ou `adminNote` ; pose `resolvedAt` automatiquement en passant à `RESOLVED`.
+- `POST /market-proposals` — proposer un marché (utilisateur connecté). Même validation que
+  `POST /markets` (`validateMarketInput`), stockée en `PENDING`.
+- `GET /market-proposals` — les propositions de l'utilisateur connecté ; `GET /market-proposals?all=true`
+  (admin) — toutes les propositions, avec le proposant et le marché créé le cas échéant.
+- `POST /market-proposals/:id/approve`, `POST /market-proposals/:id/reject` — protégées par
+  `requireAdminOrInternal` (JWT admin **ou** header `X-Internal-Secret` correspondant à
+  `INTERNAL_API_SECRET` — c'est ce second cas qui permet au bot Discord d'agir sans compte utilisateur).
+  `approve` réutilise `createMarketFromFields` (`src/marketCreation.ts`, même fonction que
+  `POST /markets`) : Postgres puis chaîne, rollback Postgres si la transaction on-chain échoue (la
+  proposition reste `PENDING`, réessayable). Les deux routes sont idempotentes : approuver/rejeter une
+  proposition déjà décidée renvoie le résultat existant (`200`) plutôt que d'échouer ou de dupliquer le
+  marché — nécessaire puisqu'une décision peut arriver soit d'un clic Discord, soit de l'onglet admin, et
+  les deux peuvent théoriquement arriver en même temps.
+- `GET /market-proposals/pending-unnotified`, `GET /market-proposals/decided-unsynced`,
+  `PATCH /market-proposals/:id/notify`, `PATCH /market-proposals/:id/sync` — routes internes
+  (`requireInternal`, secret partagé uniquement) utilisées par le bot Discord pour son polling : trouver
+  les propositions pas encore postées/pas encore reflétées sur Discord, puis marquer que c'est fait. Voir
+  `apps/discord-bot/README.md`.
 - `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain (`BINARY` et `MULTI` tous deux vérifiés), paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
 - `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket` pour `BINARY`, `createMultiMarket` pour `MULTI`).
 - `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
@@ -311,6 +361,11 @@ déploiement. Ici, le résumé côté backend :
   d'autorisation, un compte `ADMIN` n'a **jamais** de wallet custodial provisionné (`walletAddress`/
   `encryptedPrivateKey` restent `null` — `POST /users` dans `src/routes/users.ts` saute la génération de
   wallet et le mint pour ce rôle), donc il n'a de toute façon rien à miser.
+- **Le bot Discord n'est pas un utilisateur.** Plutôt que de lui créer un compte `ADMIN` fictif (JWT
+  classique), les routes qu'il appelle acceptent un header `X-Internal-Secret` comparé à
+  `INTERNAL_API_SECRET` (`requireInternal`/`requireAdminOrInternal` dans `src/middleware/auth.ts`) — un
+  appelant non-humain reste explicitement distinct d'un utilisateur, sans compte à protéger/désactiver si
+  le secret fuit (il suffit de le régénérer).
 - **Aucune requête ne peut faire planter le serveur.** `express-async-errors` est importé en premier dans `src/index.ts` pour qu'une promesse rejetée dans une route `async` soit automatiquement transmise au middleware d'erreur final, qui répond `500` proprement au lieu de laisser le process planter (Express 4 ne le fait pas nativement).
 
 ## Diagramme
@@ -318,7 +373,9 @@ déploiement. Ici, le résumé côté backend :
 ```
 User ──< Bet >── Market ──< PricePoint
 User ──< Ticket >── (Bet, Market optionnels)
+User ──< MarketProposal >── Market (optionnel, posé à l'approbation)
 ```
 
-- Un `User` peut avoir plusieurs `Bet` et plusieurs `Ticket`.
-- Un `Market` peut avoir plusieurs `Bet`, plusieurs `PricePoint`, et être référencé par des `Ticket`.
+- Un `User` peut avoir plusieurs `Bet`, plusieurs `Ticket` et plusieurs `MarketProposal`.
+- Un `Market` peut avoir plusieurs `Bet`, plusieurs `PricePoint`, être référencé par des `Ticket`, et être
+  issu d'au plus une `MarketProposal` approuvée.

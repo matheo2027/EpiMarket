@@ -1,11 +1,13 @@
+name: epimarket
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-polymarket}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-polymarket}
-      POSTGRES_DB: ${POSTGRES_DB:-polymarket}
+      POSTGRES_USER: ${POSTGRES_USER:-epimarket}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-epimarket}
+      POSTGRES_DB: ${POSTGRES_DB:-epimarket}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -22,6 +24,23 @@ services:
       - "${HARDHAT_PORT:-8545}:8545"
     command: ["sh", "docker-entrypoint.sh"]
 
+  discord-bot:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    working_dir: /workspace/apps/discord-bot
+    volumes:
+      - .:/workspace
+      - discord_bot_node_modules:/workspace/apps/discord-bot/node_modules
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
+      API_BASE_URL: ${DISCORD_BOT_API_BASE_URL:-http://host.docker.internal:4000}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["sh", "docker-entrypoint.sh"]
+
 volumes:
   postgres_data:
   hardhat_node_modules:
+  discord_bot_node_modules:

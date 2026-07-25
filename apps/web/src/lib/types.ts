@@ -114,6 +114,42 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   RESOLVED: "Résolu",
 };
 
+export type MarketProposalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export type MarketProposal = {
+  id: string;
+  title: string;
+  description: string;
+  type: MarketType;
+  yesDescription: string | null;
+  noDescription: string | null;
+  optionLabels: string[];
+  category: MarketCategory;
+  startDate: string;
+  endDate: string;
+  status: MarketProposalStatus;
+  adminNote: string | null;
+  decidedBy: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  proposerId: string;
+  marketId: string | null;
+  proposer?: Pick<User, "id" | "email" | "username">;
+  market?: Pick<Market, "id" | "title"> | null;
+};
+
+export const MARKET_PROPOSAL_STATUS_LABELS: Record<MarketProposalStatus, string> = {
+  PENDING: "En attente",
+  APPROVED: "Approuvé",
+  REJECTED: "Rejeté",
+};
+
+export function marketProposalStatusTone(status: MarketProposalStatus): string {
+  if (status === "APPROVED") return "text-yes";
+  if (status === "REJECTED") return "text-no";
+  return "text-muted";
+}
+
 export type AdminStats = {
   totalUsers: number;
   totalMarkets: number;

@@ -37,7 +37,10 @@ message backend inconnu de la table retombe sur l'anglais brut plutôt que de pl
 **Portée volontairement limitée à l'espace public/utilisateur** : l'espace admin (`app/admin/**`,
 `components/market-form.tsx`) reste **en français uniquement**, jamais vu par un visiteur externe ou le
 jury. Ses appels à `errorMessage()` passent `frT` (un raccourci `(key) => translate("fr", key)` exporté
-par `lib/i18n/index.ts`) plutôt qu'un vrai `t()` issu de `useLanguage()`.
+par `lib/i18n/index.ts`) plutôt qu'un vrai `t()` issu de `useLanguage()`. La page `app/proposer/page.tsx`
+(publique, hors admin) réutilise ce même `MarketForm` sans le traduire — seul le contenu autour du
+formulaire (titre, statuts, liste des propositions) suit `useLanguage()` : décision volontaire pour ne
+pas toucher à un composant partagé avec les deux pages admin de création/édition de marché.
 
 **Pourquoi certaines pages publiques ont un composant `*-content.tsx` séparé** : `page.tsx` (accueil),
 `marches/page.tsx`, `marches/[id]/page.tsx` et `classement/page.tsx` restent des Server Components qui
@@ -56,7 +59,9 @@ src/app/
   page.tsx                     accueil : carousel de stats globales + marché vedette + grille des marchés ouverts
   marches/page.tsx             liste des marchés, filtres catégorie/statut
   marches/[id]/page.tsx        détail d'un marché : description, cotes, graphe, formulaire de pari
-                                (deux mises en page selon market.type — OUI/NON ou options multiples)
+                                (deux mises en page selon market.type — OUI/NON ou options multiples),
+                                et sous le formulaire une section « Vos paris sur ce marché » (bouton
+                                Retirer, mêmes règles que sur la page Profil)
   classement/page.tsx          classement public des meilleurs parieurs (gain net réalisé), Server
                                 Component comme marches/page.tsx — pas besoin d'être connecté
   connexion/, inscription/     auth
@@ -67,11 +72,15 @@ src/app/
                                 (avec bouton "Retirer" sur un pari en cours — remboursement intégral
                                 avant résolution, pas une vente au prix du marché)
   support/page.tsx             signaler un problème (ticket) + suivi de ses propres tickets
+  proposer/page.tsx            proposer un marché (réutilise MarketForm) + suivi de ses propres
+                                propositions (statut, note admin si rejetée) — modération admin et/ou
+                                via un bot Discord, voir apps/discord-bot/README.md
   admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
     marches/                   CRUD marché + conclure un marché
     paris/                     liste de tous les paris (mise, camp, gain, hash de transaction)
     utilisateurs/              CRUD utilisateurs
     tickets/                   traiter les tickets de support (statut, note)
+    propositions/              modérer les marchés proposés par les utilisateurs (approuver/rejeter)
     diagnostics/               cohérence base ↔ blockchain, avec actions de resynchronisation
 ```
 
@@ -89,6 +98,8 @@ src/app/
 - `components/market-form.tsx` — formulaire partagé entre création et édition de marché côté admin. Le type (`BINARY`/`MULTI`) ne se choisit qu'à la création ; pour `MULTI`, une liste dynamique de libellés d'options (3 à 6) remplace les champs OUI/NON, et le nombre d'options est verrouillé une fois le marché créé (fixé on-chain). À la création, un 4ᵉ slot par défaut est pré-rempli avec "Autre" (aucun traitement spécial ailleurs dans le code — c'est une option comme les autres, le règlement pari-mutuel ne distingue pas son `optionId`) ; `addOption()` insère les nouveaux slots juste avant elle pour qu'elle reste toujours en dernière position.
 - `components/admin-stats.tsx` — bandeau de compteurs globaux en haut des pages admin (`GET /users/stats`).
 - `lib/bet-stats.ts` — calcule les statistiques de la page Profil (taux de réussite, P&L, répartition par catégorie, historique) à partir de la liste brute des paris de l'utilisateur.
+- `components/bet-row.tsx` — une ligne de pari (mise, statut/gain, bouton Retirer si `canWithdraw()` — même règle de 5h que côté API), partagée entre `portefeuille/page.tsx` et `components/market-bets.tsx` pour ne pas dupliquer la logique de retrait. `linkToMarket` désactive le lien vers le marché (inutile quand on est déjà dessus).
+- `components/market-bets.tsx` — section « Vos paris sur ce marché » sous le formulaire de pari (`marches/[id]`), fetch `GET /bets?marketId=`, masquée si non connecté ou admin. Un retrait déclenche `router.refresh()` pour que les cotes affichées (pool impacté par le remboursement) se remettent à jour.
 - `lib/confirm-context.tsx` — remplace `window.confirm()` par une modale in-app (`useConfirm()`), utilisée pour toutes les actions destructives ou déclenchant une vraie transaction blockchain (conclure, supprimer, resynchroniser).
 - `app/admin/diagnostics/page.tsx` — si `GET /diagnostics` renvoie `503` (blockchain locale pas encore joignable, typiquement juste après `npm run dev`), la page affiche un message d'attente et réessaie automatiquement toutes les 3s (jusqu'à 10 fois) au lieu d'afficher une erreur ; au-delà, un bouton "Réessayer" manuel apparaît.
 

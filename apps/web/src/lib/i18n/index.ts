@@ -2,7 +2,7 @@ import { fr, type TranslationKey } from "./fr";
 import { en } from "./en";
 import { es } from "./es";
 import { de } from "./de";
-import type { MarketCategory, TicketStatus } from "@/lib/types";
+import type { MarketCategory, MarketProposalStatus, TicketStatus } from "@/lib/types";
 
 export type Language = "fr" | "en" | "es" | "de";
 export type { TranslationKey };
@@ -137,4 +137,14 @@ const TICKET_STATUS_KEYS: Record<TicketStatus, TranslationKey> = {
 
 export function ticketStatusKey(status: TicketStatus): TranslationKey {
   return TICKET_STATUS_KEYS[status];
+}
+
+const MARKET_PROPOSAL_STATUS_KEYS: Record<MarketProposalStatus, TranslationKey> = {
+  PENDING: "marketProposalStatus.pending",
+  APPROVED: "marketProposalStatus.approved",
+  REJECTED: "marketProposalStatus.rejected",
+};
+
+export function marketProposalStatusKey(status: MarketProposalStatus): TranslationKey {
+  return MARKET_PROPOSAL_STATUS_KEYS[status];
 }

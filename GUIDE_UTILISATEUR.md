@@ -13,6 +13,7 @@ Ce guide explique comment utiliser le site, côté visiteur/parieur et côté ad
 - [Comment sont calculés les gains](#comment-sont-calculés-les-gains)
 - [Le Classement](#le-classement)
 - [Signaler un problème](#signaler-un-problème)
+- [Proposer un marché](#proposer-un-marché)
 - [Espace administrateur](#espace-administrateur)
 - [Questions fréquentes](#questions-fréquentes)
 - [Le pied de page](#le-pied-de-page)
@@ -90,6 +91,8 @@ Un pari ne peut être placé que si le marché est **ouvert** et dans sa **péri
 
 Changé d'avis ? Vous pouvez **retirer** un pari en cours depuis votre Profil, jusqu'à **5 heures avant la clôture** du marché — voir la section suivante.
 
+Sous le formulaire de pari, une section **« Vos paris sur ce marché »** liste vos paris déjà placés sur ce marché précis, avec le même bouton **Retirer** — pratique pour changer d'avis juste après avoir parié, sans changer de page.
+
 ---
 
 ## Le Profil
@@ -140,6 +143,23 @@ La même page liste vos tickets précédents avec leur statut (Ouvert / En cours
 
 ---
 
+## Proposer un marché
+
+Une idée de marché ? La page **Proposer un marché** (lien dans le header) reprend exactement le même
+formulaire que celui utilisé côté admin (titre, description, catégorie, dates, OUI/NON ou options
+multiples). Votre proposition n'est pas publiée immédiatement : elle passe par une **modération**, faite
+par un administrateur (depuis le site, ou via un bot Discord en interne). Vous serez informé de la
+décision directement sur cette page :
+
+- **En attente** : pas encore examinée.
+- **Approuvée** : le marché a été créé et est désormais visible dans la liste des marchés.
+- **Rejetée** : accompagnée, si l'admin en a laissé une, d'une note expliquant pourquoi.
+
+La même page liste toutes vos propositions précédentes avec leur statut, comme la page Support liste vos
+tickets.
+
+---
+
 ## Espace administrateur
 
 Réservé aux comptes avec le rôle **Admin**. Un lien **Admin** apparaît dans le header pour ces comptes, menant à `/admin`.
@@ -170,6 +190,16 @@ sur la blockchain, il n'existe pas de mécanisme pour la reprendre.
 ### Tickets
 
 Liste tous les tickets envoyés par les utilisateurs via la page Support (sujet, message, auteur, et le hash de transaction lié le cas échéant). Pour chaque ticket, changez son statut (Ouvert / En cours / Résolu) et laissez une note qui sera visible par l'utilisateur, puis **Enregistrer**.
+
+### Propositions
+
+Liste tous les marchés proposés par les utilisateurs via la page **Proposer un marché**. Pour chaque
+proposition en attente : **Approuver** (crée immédiatement le vrai marché, visible ensuite dans l'onglet
+Marchés) ou **Rejeter** (avec une note optionnelle, visible par l'utilisateur). Les mêmes décisions
+peuvent aussi être prises directement dans Discord si un bot de modération est configuré — un message est
+posté automatiquement dans un salon dédié pour chaque nouvelle proposition, avec les mêmes boutons
+Approuver/Rejeter ; les deux surfaces restent synchronisées (une proposition décidée d'un côté se met à
+jour de l'autre en quelques secondes).
 
 ### Diagnostics
 

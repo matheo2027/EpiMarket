@@ -5,6 +5,7 @@ import { prisma } from "./prisma.js";
 import { authRouter } from "./routes/auth.js";
 import { betsRouter } from "./routes/bets.js";
 import { marketsRouter } from "./routes/markets.js";
+import { marketProposalsRouter } from "./routes/marketProposals.js";
 import { usersRouter } from "./routes/users.js";
 import { ticketsRouter } from "./routes/tickets.js";
 import { diagnosticsRouter } from "./routes/diagnostics.js";
@@ -16,6 +17,7 @@ app.use(express.json());
 
 app.use("/auth", authRouter);
 app.use("/markets", marketsRouter);
+app.use("/market-proposals", marketProposalsRouter);
 app.use("/bets", betsRouter);
 app.use("/users", usersRouter);
 app.use("/tickets", ticketsRouter);

@@ -8,6 +8,7 @@ import { OptionsBar } from "@/components/options-bar";
 import { PriceChart } from "@/components/price-chart";
 import { OptionsPriceChart } from "@/components/options-price-chart";
 import { BetForm } from "@/components/bet-form";
+import { MarketBets } from "@/components/market-bets";
 import { MarketComments } from "@/components/market-comments";
 import { useLanguage } from "@/lib/language-context";
 import { localeFor } from "@/lib/i18n";
@@ -121,8 +122,9 @@ export function MarketDetailContent({
           <MarketComments marketId={market.id} initialComments={comments} />
         </div>
 
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        <div className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
           <BetForm market={market} />
+          <MarketBets marketId={market.id} />
         </div>
       </div>
     </div>
