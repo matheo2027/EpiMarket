@@ -4,7 +4,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/prisma.js";
 import { createAdmin, createProposal, registerUser, resetDb } from "./helpers.js";
 
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET!;
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET_MODERATION!;
 
 describe("market proposals", () => {
   beforeEach(resetDb);
@@ -33,6 +33,12 @@ describe("market proposals", () => {
 
     const ok = await request(app).get("/market-proposals/pending-unnotified").set("X-Internal-Secret", INTERNAL_SECRET);
     expect(ok.status).toBe(200);
+  });
+
+  it("rejects the bets bot's secret on the proposals routes — each bot's secret only unlocks its own routes", async () => {
+    const betsSecret = process.env.INTERNAL_API_SECRET_BETS!;
+    const crossSecret = await request(app).get("/market-proposals/pending-unnotified").set("X-Internal-Secret", betsSecret);
+    expect(crossSecret.status).toBe(401);
   });
 
   it("admin approval creates a real market and is idempotent", async () => {

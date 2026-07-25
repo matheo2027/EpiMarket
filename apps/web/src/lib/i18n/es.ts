@@ -303,5 +303,6 @@ export const es: Record<TranslationKey, string> = {
   "errors.notYourBet": "Esta apuesta no te pertenece.",
   "errors.betAlreadyWithdrawn": "Esta apuesta ya ha sido retirada.",
   "errors.withdrawalCutoff": "El retiro ya no es posible en las 5 horas previas al cierre del mercado.",
+  "errors.blockchainNotReady": "La blockchain todavía está iniciándose, inténtalo de nuevo en un momento.",
   "errors.generic": "Ha ocurrido un error.",
 };

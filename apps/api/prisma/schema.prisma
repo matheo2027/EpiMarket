@@ -130,6 +130,11 @@ model Bet {
   chainIndex  Int       @default(0)
   withdrawnAt DateTime?
 
+  // If a third Discord-announced event ever comes up, generalize this into a
+  // separate (betId, event, notifiedAt) table instead of adding a third column.
+  discordNotifiedAt         DateTime? // "bet placed" announced in the Discord bets feed
+  discordWithdrawNotifiedAt DateTime? // "bet withdrawn" announced in the Discord bets feed
+
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
@@ -144,6 +149,8 @@ model Bet {
   @@index([userId])
   @@index([marketId])
   @@index([optionId])
+  @@index([discordNotifiedAt])
+  @@index([discordWithdrawNotifiedAt])
 }
 
 model PricePoint {

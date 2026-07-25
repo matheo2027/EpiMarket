@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { type BetSide, Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { currentUserRole, requireAuth } from "../middleware/auth.js";
+import { currentUserRole, requireAuth, requireInternalSecret } from "../middleware/auth.js";
 import { computeOptionPrices, computePrices } from "../pricing.js";
 import {
+  BLOCKCHAIN_NOT_READY_MESSAGE,
   getOnChainBalance,
   getReadOnlyContract,
   getUserContract,
+  isContractDeployed,
   readPlacedBetIndex,
   revertReason,
   sideToOutcome,
@@ -15,6 +17,8 @@ import { runAsSender } from "../blockchain/provider.js";
 import { fromChainAmount, toChainAmount } from "../blockchain/units.js";
 
 export const betsRouter = Router();
+
+const requireInternal = requireInternalSecret("INTERNAL_API_SECRET_BETS");
 
 // No withdrawal in the last stretch before a market's official close — same
 // rationale as a real order book pulling liquidity near settlement, kept
@@ -32,6 +36,10 @@ betsRouter.post("/", requireAuth, async (req, res) => {
   }
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
     res.status(400).json({ error: "amount must be a positive number" });
+    return;
+  }
+  if (!(await isContractDeployed())) {
+    res.status(503).json({ error: BLOCKCHAIN_NOT_READY_MESSAGE, retryable: true });
     return;
   }
 
@@ -249,6 +257,10 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Bet already settled" });
     return;
   }
+  if (!(await isContractDeployed())) {
+    res.status(503).json({ error: BLOCKCHAIN_NOT_READY_MESSAGE, retryable: true });
+    return;
+  }
 
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
   if (!user || !user.walletAddress || !user.encryptedPrivateKey) {
@@ -377,6 +389,55 @@ betsRouter.get("/", requireAuth, async (req, res) => {
     : await prisma.bet.findMany({ where, include: { market: true, option: true }, orderBy: { createdAt: "desc" } });
 
   res.json({ bets });
+});
+
+const betFeedInclude = {
+  user: { select: { username: true } },
+  market: { select: { title: true } },
+  option: { select: { label: true } },
+} as const;
+
+// Caps each feed per poll tick so a backlog (bot downtime, migration backfill)
+// can't turn one poll into one giant query + a burst of Discord sends — the
+// next tick just picks up where this one left off.
+const MAX_UNNOTIFIED_PER_FEED = 100;
+
+// Feeds the read-only "bets" Discord bot (apps/discord-bot/src/bets-bot) — same
+// notify/mark-notified polling pattern as the market-proposals bot, but one-way
+// (no decision to sync back) and split in two independent feeds (placed vs.
+// withdrawn) since a bet can need either announcement at a different time.
+// Declared before GET /:id (a literal path, "/:id" would otherwise swallow it —
+// same footgun as GET /users/leaderboard, see apps/api/README.md).
+betsRouter.get("/unnotified", requireInternal, async (_req, res) => {
+  const [placed, withdrawn] = await Promise.all([
+    prisma.bet.findMany({
+      where: { discordNotifiedAt: null },
+      include: betFeedInclude,
+      orderBy: { createdAt: "asc" },
+      take: MAX_UNNOTIFIED_PER_FEED,
+    }),
+    prisma.bet.findMany({
+      where: { withdrawnAt: { not: null }, discordWithdrawNotifiedAt: null },
+      include: betFeedInclude,
+      orderBy: { withdrawnAt: "asc" },
+      take: MAX_UNNOTIFIED_PER_FEED,
+    }),
+  ]);
+  res.json({ placed, withdrawn });
+});
+
+betsRouter.patch("/:id/notify", requireInternal, async (req, res) => {
+  const { event } = req.body ?? {};
+  if (event !== "placed" && event !== "withdrawn") {
+    res.status(400).json({ error: "event must be 'placed' or 'withdrawn'" });
+    return;
+  }
+
+  const bet = await prisma.bet.update({
+    where: { id: req.params.id },
+    data: event === "placed" ? { discordNotifiedAt: new Date() } : { discordWithdrawNotifiedAt: new Date() },
+  });
+  res.json({ bet });
 });
 
 betsRouter.get("/:id", requireAuth, async (req, res) => {

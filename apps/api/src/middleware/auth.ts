@@ -44,29 +44,38 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   }
 }
 
-function hasValidInternalSecret(req: Request): boolean {
-  const expected = process.env.INTERNAL_API_SECRET;
+function hasValidInternalSecret(req: Request, envVarName: string): boolean {
+  const expected = process.env[envVarName];
   return Boolean(expected) && req.headers["x-internal-secret"] === expected;
 }
 
-/** For endpoints called only by the Discord bot — no human user, just a shared secret. */
-export function requireInternal(req: Request, res: Response, next: NextFunction) {
-  if (!hasValidInternalSecret(req)) {
-    res.status(401).json({ error: "Invalid internal secret" });
-    return;
-  }
-  req.isInternal = true;
-  next();
-}
-
-/** Lets the same route be called by an admin's JWT (web panel) or the bot's internal secret (Discord buttons). */
-export function requireAdminOrInternal(req: Request, res: Response, next: NextFunction) {
-  if (hasValidInternalSecret(req)) {
+/**
+ * For endpoints called only by a specific Discord bot — no human user, just a
+ * shared secret. Parameterized by which env var holds that bot's secret so
+ * one bot's credential can't be used to call another bot's routes (each bot
+ * gets its own `INTERNAL_API_SECRET_*` — see apps/discord-bot/README.md).
+ */
+export function requireInternalSecret(envVarName: string) {
+  return function (req: Request, res: Response, next: NextFunction) {
+    if (!hasValidInternalSecret(req, envVarName)) {
+      res.status(401).json({ error: "Invalid internal secret" });
+      return;
+    }
     req.isInternal = true;
     next();
-    return;
-  }
-  // requireAuth never calls next() on failure (it sends the 401 itself), so this
-  // callback only ever runs on success — no error-first check needed here.
-  requireAuth(req, res, () => requireAdmin(req, res, next));
+  };
+}
+
+/** Lets the same route be called by an admin's JWT (web panel) or that specific bot's internal secret (Discord buttons). */
+export function requireAdminOrInternalSecret(envVarName: string) {
+  return function (req: Request, res: Response, next: NextFunction) {
+    if (hasValidInternalSecret(req, envVarName)) {
+      req.isInternal = true;
+      next();
+      return;
+    }
+    // requireAuth never calls next() on failure (it sends the 401 itself), so this
+    // callback only ever runs on success — no error-first check needed here.
+    requireAuth(req, res, () => requireAdmin(req, res, next));
+  };
 }

@@ -1,4 +1,5 @@
 import { env } from "./env.js";
+import { createApiClient } from "./httpClient.js";
 
 export type MarketProposal = {
   id: string;
@@ -21,29 +22,11 @@ export type MarketProposal = {
   proposer?: { id: string; username: string };
 };
 
-class ApiClientError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function request<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Secret": env.internalApiSecret,
-    },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiClientError(res.status, (data as { error?: string }).error ?? "Request failed");
-  }
-  return data as T;
+// Reads env.apiBaseUrl/internalApiSecret lazily on each call (not once at module
+// load) — matches env.ts's own lazy-getter design, which defers the "not set"
+// error until something actually tries to talk to the API.
+function request<T>(path: string, options?: { method?: string; body?: unknown }): Promise<T> {
+  return createApiClient(env.apiBaseUrl, env.internalApiSecret)<T>(path, options);
 }
 
 export function listPendingUnnotified(): Promise<{ proposals: MarketProposal[] }> {

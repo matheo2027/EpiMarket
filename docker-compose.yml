@@ -35,12 +35,29 @@ services:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
       API_BASE_URL: ${DISCORD_BOT_API_BASE_URL:-http://host.docker.internal:4000}
-      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
+      INTERNAL_API_SECRET_MODERATION: ${INTERNAL_API_SECRET_MODERATION}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["sh", "docker-entrypoint.sh"]
+
+  bets-bot:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    working_dir: /workspace/apps/discord-bot
+    volumes:
+      - .:/workspace
+      - bets_bot_node_modules:/workspace/apps/discord-bot/node_modules
+    environment:
+      BETS_DISCORD_BOT_TOKEN: ${BETS_DISCORD_BOT_TOKEN}
+      BETS_DISCORD_CHANNEL_ID: ${BETS_DISCORD_CHANNEL_ID}
+      API_BASE_URL: ${DISCORD_BOT_API_BASE_URL:-http://host.docker.internal:4000}
+      INTERNAL_API_SECRET_BETS: ${INTERNAL_API_SECRET_BETS}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["sh", "docker-entrypoint.sh", "dev:bets"]
 
 volumes:
   postgres_data:
   hardhat_node_modules:
   discord_bot_node_modules:
+  bets_bot_node_modules:

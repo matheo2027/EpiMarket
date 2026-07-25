@@ -102,7 +102,8 @@ jobs:
           WALLET_ENCRYPTION_KEY="1564ba82206a5c5f16d29c9547acdd191c845633d195cfdccee0d9ebbbf2eaea"
           HARDHAT_RPC_URL="http://127.0.0.1:8545"
           HARDHAT_FUNDER_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-          INTERNAL_API_SECRET="ci-test-internal-secret"
+          INTERNAL_API_SECRET_MODERATION="ci-test-internal-secret-moderation"
+          INTERNAL_API_SECRET_BETS="ci-test-internal-secret-bets"
           EOF
 
       - name: Run API tests

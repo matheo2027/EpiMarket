@@ -7,7 +7,7 @@ Backend Express/TypeScript. La base de données est PostgreSQL, accédée via [P
 Deux fichiers `.env` distincts :
 
 - **`.env` à la racine du repo** — identifiants PostgreSQL utilisés par `docker-compose.yml` pour créer le conteneur (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`).
-- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS), les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas), et `INTERNAL_API_SECRET` (secret partagé avec le bot Discord, voir `apps/discord-bot/README.md`).
+- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS), les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas), et `INTERNAL_API_SECRET_MODERATION`/`INTERNAL_API_SECRET_BETS` (un secret distinct par bot Discord, voir `apps/discord-bot/README.md`).
 
 Si tu changes les identifiants dans le `.env` racine, mets à jour `DATABASE_URL` dans `apps/api/.env` en conséquence.
 
@@ -44,13 +44,18 @@ de lecture), retrait de pari avant résolution (remboursement, double-retrait re
 du calcul de résolution), favoris, commentaires, classement, propositions de marché (soumission,
 approbation/rejet admin et via le secret interne du bot, idempotence, listing propre à l'utilisateur vs
 `?all=true` admin, cycle notify/sync utilisé par le bot), tickets (création liée à un pari/marché,
-permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), CRUD utilisateurs
+permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), flux Discord "paris"
+(`GET /bets/unnotified` séparant placés/retirés, `PATCH /bets/:id/notify`, secret interne requis), CRUD utilisateurs
 (création avec/sans wallet selon le rôle, doublons, permissions, suppression bloquée si l'utilisateur a
 déjà parié ou si c'est son propre compte admin, stats globales), diagnostics (détection d'un marché
 BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, et
 les trois actions de resynchronisation correspondantes — désynchronisations simulées par une écriture
 Postgres directe, en contournant volontairement les routes qui gardent normalement base et chaîne
-synchronisées, pour reproduire ce qui se passe réellement lors d'un redémarrage de la chaîne Hardhat).
+synchronisées, pour reproduire ce qui se passe réellement lors d'un redémarrage de la chaîne Hardhat),
+et un contrôle direct de `isContractDeployed()` (le vrai contrat déployé est bien détecté comme prêt,
+et une adresse sans code renvoie bien un bytecode vide — la simulation complète "contrat pas encore là"
+a été vérifiée manuellement plutôt qu'en automatisé, pour ne pas perturber la chaîne Hardhat partagée par
+tous les autres tests).
 
 ## Schéma
 
@@ -134,6 +139,8 @@ Un pari placé par un utilisateur sur un marché.
 | `createdAt`   | `DateTime` |                                             |
 | `chainIndex`  | `Int`      | index de ce pari dans le tableau on-chain (`marketBets`/`multiMarketBets`), capturé depuis l'event `BetPlaced`/`MultiBetPlaced` à la création — sert à cibler ce pari précis pour un retrait (`withdrawBet`/`withdrawMultiBet`) |
 | `withdrawnAt` | `DateTime?` | posé si l'utilisateur a annulé ce pari avant résolution (voir `POST /bets/:id/withdraw` plus bas) — `null` sinon |
+| `discordNotifiedAt` | `DateTime?` | posé une fois le pari annoncé dans le flux Discord "paris" (`GET /bets/unnotified`, voir `apps/discord-bot/README.md`) |
+| `discordWithdrawNotifiedAt` | `DateTime?` | idem pour l'annonce du retrait — champ séparé car les deux évènements (placé/retiré) n'arrivent pas forcément au même moment |
 | `userId`      | `String`   | FK vers `User`                             |
 | `marketId`    | `String`   | FK vers `Market`                           |
 
@@ -252,6 +259,11 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
   « Vos paris sur ce marché » de la page de détail, voir `apps/web/README.md`) ; combinable avec `status`
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
+- `GET /bets/unnotified` — (interne, `requireInternalSecret("INTERNAL_API_SECRET_BETS")`) `{ placed, withdrawn }` : paris pas encore
+  annoncés dans le flux Discord "paris" (voir plus bas et `apps/discord-bot/README.md`). Déclarée avant
+  `GET /bets/:id` pour la même raison que `GET /users/leaderboard` plus haut.
+- `PATCH /bets/:id/notify` — (interne) `{ event: "placed" | "withdrawn" }`, marque l'annonce
+  correspondante comme faite pour ce pari.
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
 - `GET /users/:id` — soi-même ou admin
 - `GET /users/stats` — (admin) compteurs globaux (utilisateurs, marchés ouverts/résolus, paris, volume) pour le bandeau en haut des pages admin.
@@ -269,8 +281,10 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
 - `GET /market-proposals` — les propositions de l'utilisateur connecté ; `GET /market-proposals?all=true`
   (admin) — toutes les propositions, avec le proposant et le marché créé le cas échéant.
 - `POST /market-proposals/:id/approve`, `POST /market-proposals/:id/reject` — protégées par
-  `requireAdminOrInternal` (JWT admin **ou** header `X-Internal-Secret` correspondant à
-  `INTERNAL_API_SECRET` — c'est ce second cas qui permet au bot Discord d'agir sans compte utilisateur).
+  `requireAdminOrInternalSecret("INTERNAL_API_SECRET_MODERATION")` (JWT admin **ou** header
+  `X-Internal-Secret` correspondant à `INTERNAL_API_SECRET_MODERATION` — c'est ce second cas qui permet
+  au bot Discord de modération d'agir sans compte utilisateur ; le secret du bot paris n'est pas accepté
+  ici, voir plus bas).
   `approve` réutilise `createMarketFromFields` (`src/marketCreation.ts`, même fonction que
   `POST /markets`) : Postgres puis chaîne, rollback Postgres si la transaction on-chain échoue (la
   proposition reste `PENDING`, réessayable). Les deux routes sont idempotentes : approuver/rejeter une
@@ -279,7 +293,7 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
   les deux peuvent théoriquement arriver en même temps.
 - `GET /market-proposals/pending-unnotified`, `GET /market-proposals/decided-unsynced`,
   `PATCH /market-proposals/:id/notify`, `PATCH /market-proposals/:id/sync` — routes internes
-  (`requireInternal`, secret partagé uniquement) utilisées par le bot Discord pour son polling : trouver
+  (`requireInternalSecret("INTERNAL_API_SECRET_MODERATION")`) utilisées par le bot Discord de modération pour son polling : trouver
   les propositions pas encore postées/pas encore reflétées sur Discord, puis marquer que c'est fait. Voir
   `apps/discord-bot/README.md`.
 - `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain (`BINARY` et `MULTI` tous deux vérifiés), paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
@@ -340,6 +354,24 @@ déploiement. Ici, le résumé côté backend :
 - Le nœud Hardhat local tourne via `docker-compose.yml` (service `hardhat`) ou `npx hardhat node` en
   dev ; `apps/blockchain/scripts/deploy.ts` déploie le contrat et écrit son adresse/ABI dans
   `src/blockchain/deployment.json` (gitignored, régénéré à chaque déploiement).
+- **`deployment.json` est relu à chaque appel, jamais mis en cache.** `npm run dev` démarre l'API et
+  Hardhat en parallèle (`concurrently`) — l'API répond en ~1s, Hardhat met 10 à 30s (`npm install` +
+  compilation + déploiement) avant que le contrat soit prêt à sa nouvelle adresse. Si `getDeployment()`
+  gardait l'adresse en mémoire dès la première lecture, l'API resterait bloquée sur une adresse obsolète
+  jusqu'à son propre redémarrage dès que Hardhat redéploie (que ce soit au tout premier démarrage, ou
+  après un redémarrage du seul conteneur `hardhat` — voir `apps/blockchain/README.md#limites-assumées-du-poc`).
+  Relire le fichier à chaque appel (coût négligeable, petit JSON local) élimine cette classe de bug :
+  dès que Hardhat termine, l'appel suivant récupère automatiquement la bonne adresse.
+- **`isContractDeployed()`** (`src/blockchain/contract.ts`) vérifie via `provider.getCode(address)` que
+  du bytecode existe bien à l'adresse courante avant qu'une route écrive on-chain — utilisé par
+  `createMarketFromFields` (donc `POST /markets` et l'approbation de proposition) et par
+  `POST /bets`/`POST /bets/:id/withdraw`. Nécessaire car envoyer une transaction vers une adresse sans
+  code ne fait **pas échouer l'appel `eth_call` en lecture** de la même façon qu'un réseau injoignable
+  (voir `isBlockchainUnavailable()` juste en dessous, qui ne couvrait que ce second cas) — sans ce
+  contrôle explicite, la requête donnait une erreur peu claire (`"Could not place the bet on-chain"`,
+  ou pire : une transaction "réussie" qui n'exécute en réalité aucun code) plutôt qu'un message net.
+  Renvoie `503 { error: "The blockchain is still starting up, please try again in a moment.", retryable: true }`
+  — traduit côté web via `errors.blockchainNotReady`.
 
 ## Sécurité et gestion de la concurrence
 
@@ -361,11 +393,14 @@ déploiement. Ici, le résumé côté backend :
   d'autorisation, un compte `ADMIN` n'a **jamais** de wallet custodial provisionné (`walletAddress`/
   `encryptedPrivateKey` restent `null` — `POST /users` dans `src/routes/users.ts` saute la génération de
   wallet et le mint pour ce rôle), donc il n'a de toute façon rien à miser.
-- **Le bot Discord n'est pas un utilisateur.** Plutôt que de lui créer un compte `ADMIN` fictif (JWT
-  classique), les routes qu'il appelle acceptent un header `X-Internal-Secret` comparé à
-  `INTERNAL_API_SECRET` (`requireInternal`/`requireAdminOrInternal` dans `src/middleware/auth.ts`) — un
-  appelant non-humain reste explicitement distinct d'un utilisateur, sans compte à protéger/désactiver si
-  le secret fuit (il suffit de le régénérer).
+- **Les bots Discord ne sont pas des utilisateurs.** Plutôt que de leur créer des comptes `ADMIN` fictifs
+  (JWT classique), les routes qu'ils appellent acceptent un header `X-Internal-Secret` comparé à une
+  variable d'env (`requireInternalSecret`/`requireAdminOrInternalSecret` dans `src/middleware/auth.ts`,
+  paramétrées par le nom de la variable à vérifier) — un appelant non-humain reste explicitement distinct
+  d'un utilisateur, sans compte à protéger/désactiver si le secret fuit (il suffit de le régénérer).
+  **Chaque bot a son propre secret** (`INTERNAL_API_SECRET_MODERATION` pour le bot de modération,
+  `INTERNAL_API_SECRET_BETS` pour le bot paris) plutôt qu'un secret unique partagé — un bot compromis ne
+  peut agir que sur ses propres routes (`/market-proposals/*` ou `/bets/*`), pas sur celles de l'autre.
 - **Aucune requête ne peut faire planter le serveur.** `express-async-errors` est importé en premier dans `src/index.ts` pour qu'une promesse rejetée dans une route `async` soit automatiquement transmise au middleware d'erreur final, qui répond `500` proprement au lieu de laisser le process planter (Express 4 ne le fait pas nativement).
 
 ## Diagramme

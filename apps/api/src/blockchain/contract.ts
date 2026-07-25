@@ -18,20 +18,44 @@ export function sideToOutcome(side: "YES" | "NO"): number {
 
 type Deployment = { address: string; abi: ethers.InterfaceAbi };
 
-let deployment: Deployment | undefined;
-
+/**
+ * Re-reads the file on every call rather than caching it — Hardhat can redeploy
+ * to a new address after this process has already started (e.g. its container
+ * restarting independently of the API's), and a cached address would silently
+ * go stale until the API itself restarted. Re-parsing a small local JSON file
+ * per call is cheap enough that this isn't worth the staleness risk.
+ */
 function getDeployment(): Deployment {
-  if (!deployment) {
-    const filePath = path.join(__dirname, "deployment.json");
-    try {
-      deployment = JSON.parse(readFileSync(filePath, "utf8"));
-    } catch {
-      throw new Error(
-        `Could not read ${filePath} - has "npm run deploy:localhost" (or the hardhat docker service) run yet?`,
-      );
-    }
+  const filePath = path.join(__dirname, "deployment.json");
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8"));
+  } catch {
+    throw new Error(
+      `Could not read ${filePath} - has "npm run deploy:localhost" (or the hardhat docker service) run yet?`,
+    );
   }
-  return deployment!;
+}
+
+/**
+ * The English message user-facing routes (bets, markets) surface when the
+ * contract isn't deployed yet — same underlying cause as
+ * `isBlockchainUnavailable()`, but phrased for `apiErrorKey()`/`errors.*` on
+ * the frontend rather than the admin-only French string diagnostics.ts uses.
+ */
+export const BLOCKCHAIN_NOT_READY_MESSAGE = "The blockchain is still starting up, please try again in a moment.";
+
+/**
+ * A stale or not-yet-written deployment.json can point at an address with no
+ * code on the current chain (e.g. right after `npm run dev` starts, before
+ * Hardhat finishes deploying) — calling into it doesn't reliably throw the
+ * way a network-unreachable RPC does, so callers that write on-chain state
+ * (place a bet, create a market) check this upfront instead of guessing at
+ * the shape of whatever error a bad call produces.
+ */
+export async function isContractDeployed(): Promise<boolean> {
+  const { address } = getDeployment();
+  const code = await provider.getCode(address);
+  return code !== "0x";
 }
 
 export function getReadOnlyContract(): ethers.Contract {
@@ -103,6 +127,7 @@ const TRANSIENT_ERROR_CODES = new Set([
   "TIMEOUT",
   "ECONNREFUSED",
   "ECONNRESET",
+  "BAD_DATA", // ethers can't decode a read call's result — the usual cause is no contract at this address yet
 ]);
 
 /**

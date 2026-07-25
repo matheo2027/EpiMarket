@@ -306,6 +306,7 @@ export const fr = {
   "errors.notYourBet": "Ce pari ne vous appartient pas.",
   "errors.betAlreadyWithdrawn": "Ce pari a déjà été retiré.",
   "errors.withdrawalCutoff": "Le retrait n'est plus possible dans les 5 heures avant la clôture du marché.",
+  "errors.blockchainNotReady": "La blockchain démarre encore, réessayez dans un instant.",
   "errors.generic": "Une erreur est survenue.",
 } as const;
 

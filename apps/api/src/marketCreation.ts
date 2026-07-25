@@ -1,7 +1,7 @@
 import { MarketCategory, MarketType, type Market, type MarketOption } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { computeOptionPrices, computePrices } from "./pricing.js";
-import { getOwnerContract, revertReason } from "./blockchain/contract.js";
+import { BLOCKCHAIN_NOT_READY_MESSAGE, getOwnerContract, isContractDeployed, revertReason } from "./blockchain/contract.js";
 import { runAsOwner } from "./blockchain/provider.js";
 
 export const MIN_OPTIONS = 3;
@@ -113,6 +113,10 @@ export type CreateMarketResult =
  * lives in one place.
  */
 export async function createMarketFromFields(fields: CreateMarketFields): Promise<CreateMarketResult> {
+  if (!(await isContractDeployed())) {
+    return { ok: false, status: 503, error: BLOCKCHAIN_NOT_READY_MESSAGE };
+  }
+
   const { title, description, category, startDate, endDate, type, optionLabels, yesDescription, noDescription } =
     fields;
 
