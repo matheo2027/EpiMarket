@@ -43,6 +43,12 @@ enum TicketStatus {
   RESOLVED
 }
 
+enum MarketProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
@@ -58,10 +64,11 @@ model User {
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
 
-  bets      Bet[]
-  tickets   Ticket[]
-  favorites Favorite[]
-  comments  Comment[]
+  bets            Bet[]
+  tickets         Ticket[]
+  favorites       Favorite[]
+  comments        Comment[]
+  marketProposals MarketProposal[]
 }
 
 model Market {
@@ -93,6 +100,7 @@ model Market {
   tickets     Ticket[]
   favorites   Favorite[]
   comments    Comment[]
+  proposal    MarketProposal?
 }
 
 model MarketOption {
@@ -180,6 +188,39 @@ model Ticket {
   market   Market? @relation(fields: [marketId], references: [id])
 
   @@index([userId])
+  @@index([status])
+}
+
+model MarketProposal {
+  id             String     @id @default(cuid())
+  title          String
+  description    String
+  type           MarketType @default(BINARY)
+  yesDescription String?
+  noDescription  String?
+  optionLabels   String[]   @default([])
+  category       MarketCategory
+  startDate      DateTime
+  endDate        DateTime
+
+  status    MarketProposalStatus @default(PENDING)
+  adminNote String?
+  decidedBy String?
+  createdAt DateTime             @default(now())
+  decidedAt DateTime?
+
+  proposerId String
+  proposer   User   @relation(fields: [proposerId], references: [id])
+
+  marketId String? @unique
+  market   Market? @relation(fields: [marketId], references: [id])
+
+  discordMessageId String?
+  discordChannelId String?
+  notifiedAt       DateTime?
+  discordSyncedAt  DateTime?
+
+  @@index([proposerId])
   @@index([status])
 }
 

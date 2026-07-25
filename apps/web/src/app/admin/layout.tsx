@@ -11,6 +11,7 @@ const TABS = [
   { href: "/admin/paris", label: "Paris" },
   { href: "/admin/utilisateurs", label: "Utilisateurs" },
   { href: "/admin/tickets", label: "Tickets" },
+  { href: "/admin/propositions", label: "Propositions" },
   { href: "/admin/diagnostics", label: "Diagnostics" },
 ];
 

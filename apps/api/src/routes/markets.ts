@@ -1,34 +1,16 @@
 import { Router } from "express";
-import { MarketCategory, MarketStatus, MarketType, type Market, type MarketOption } from "@prisma/client";
+import { MarketCategory, MarketStatus, type MarketOption } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
-import { computeOptionPrices, computePrices } from "../pricing.js";
 import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
 import { runAsOwner } from "../blockchain/provider.js";
 import { fromChainAmount } from "../blockchain/units.js";
+import { createMarketFromFields, optionsOrder, serializeMarket, validateMarketInput } from "../marketCreation.js";
 
 export const marketsRouter = Router();
 
 const CATEGORIES = Object.values(MarketCategory);
 const STATUSES = Object.values(MarketStatus);
-const MIN_OPTIONS = 3;
-const MAX_OPTIONS = 6;
-
-const optionsOrder = { options: { orderBy: { sortOrder: "asc" as const } } };
-
-function serializeMarket(market: Market & { options?: MarketOption[] }) {
-  if (market.type === "MULTI") {
-    return { ...market, options: computeOptionPrices(market.options ?? []) };
-  }
-  return { ...market, ...computePrices(market) };
-}
-
-function validateOptionLabels(options: unknown): string[] | null {
-  if (!Array.isArray(options) || options.length < MIN_OPTIONS || options.length > MAX_OPTIONS) return null;
-  const labels = options.map((o) => (typeof o === "string" ? o.trim() : ""));
-  if (labels.some((l) => l.length === 0)) return null;
-  return labels;
-}
 
 const SORTS = {
   recent: { createdAt: "desc" as const },
@@ -239,98 +221,19 @@ marketsRouter.delete("/:id/comments/:commentId", requireAuth, async (req, res) =
 });
 
 marketsRouter.post("/", requireAuth, requireAdmin, async (req, res) => {
-  const { title, description, category, startDate, endDate } = req.body ?? {};
-  const type: MarketType = req.body?.type === "MULTI" ? "MULTI" : "BINARY";
-
-  if (typeof title !== "string" || title.trim().length < 3) {
-    res.status(400).json({ error: "Title must be at least 3 characters" });
-    return;
-  }
-  if (typeof description !== "string" || description.trim().length === 0) {
-    res.status(400).json({ error: "Description is required" });
-    return;
-  }
-  if (typeof category !== "string" || !CATEGORIES.includes(category as MarketCategory)) {
-    res.status(400).json({ error: `category must be one of ${CATEGORIES.join(", ")}` });
+  const validated = validateMarketInput(req.body);
+  if (!validated.ok) {
+    res.status(validated.status).json({ error: validated.error });
     return;
   }
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    res.status(400).json({ error: "Invalid startDate/endDate" });
-    return;
-  }
-  if (end <= start) {
-    res.status(400).json({ error: "endDate must be after startDate" });
+  const result = await createMarketFromFields(validated.fields);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
 
-  let optionLabels: string[] | null = null;
-  if (type === "MULTI") {
-    optionLabels = validateOptionLabels(req.body?.options);
-    if (!optionLabels) {
-      res.status(400).json({ error: `options must be an array of ${MIN_OPTIONS} to ${MAX_OPTIONS} non-empty labels` });
-      return;
-    }
-  } else {
-    const { yesDescription, noDescription } = req.body ?? {};
-    if (typeof yesDescription !== "string" || yesDescription.trim().length === 0) {
-      res.status(400).json({ error: "yesDescription is required" });
-      return;
-    }
-    if (typeof noDescription !== "string" || noDescription.trim().length === 0) {
-      res.status(400).json({ error: "noDescription is required" });
-      return;
-    }
-  }
-
-  const market = await prisma.market.create({
-    data:
-      type === "MULTI"
-        ? {
-            title: title.trim(),
-            description,
-            type,
-            category: category as MarketCategory,
-            startDate: start,
-            endDate: end,
-            options: { create: optionLabels!.map((label, i) => ({ label, sortOrder: i })) },
-          }
-        : {
-            title: title.trim(),
-            description,
-            yesDescription: req.body.yesDescription,
-            noDescription: req.body.noDescription,
-            category: category as MarketCategory,
-            startDate: start,
-            endDate: end,
-            pricePoints: { create: { yesPrice: 0.5 } },
-          },
-    include: optionsOrder,
-  });
-
-  if (type === "MULTI") {
-    const seededAt = new Date();
-    await prisma.optionPricePoint.createMany({
-      data: market.options.map((o) => ({ optionId: o.id, price: 1 / market.options.length, timestamp: seededAt })),
-    });
-  }
-
-  try {
-    const tx =
-      type === "MULTI"
-        ? await runAsOwner((nonce) => getOwnerContract().createMultiMarket(market.id, market.options.length, { nonce }))
-        : await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
-    await tx.wait();
-  } catch (err) {
-    console.error(`Could not create on-chain market ${market.id}:`, err);
-    await prisma.market.delete({ where: { id: market.id } });
-    res.status(502).json({ error: revertReason(err) ?? "Could not create the on-chain market" });
-    return;
-  }
-
-  res.status(201).json({ market: serializeMarket(market) });
+  res.status(201).json({ market: serializeMarket(result.market) });
 });
 
 marketsRouter.patch("/:id", requireAuth, requireAdmin, async (req, res) => {

@@ -3,13 +3,12 @@ import { prisma } from "../prisma.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import {
   getOnChainBalance,
-  getOwnerContract,
   getReadOnlyContract,
   isBlockchainUnavailable,
   revertReason,
   syncUserBalance,
 } from "../blockchain/contract.js";
-import { runAsOwner } from "../blockchain/provider.js";
+import { createOnChainMarket } from "../marketCreation.js";
 
 export const diagnosticsRouter = Router();
 
@@ -87,10 +86,7 @@ diagnosticsRouter.post("/resync-market/:id", requireAuth, requireAdmin, async (r
         res.status(400).json({ error: "Market already exists on-chain" });
         return;
       }
-      const tx = await runAsOwner((nonce) =>
-        getOwnerContract().createMultiMarket(market.id, market.options.length, { nonce }),
-      );
-      await tx.wait();
+      await createOnChainMarket(market.id, "MULTI", market.options.length);
       res.json({ ok: true });
       return;
     }
@@ -102,8 +98,7 @@ diagnosticsRouter.post("/resync-market/:id", requireAuth, requireAdmin, async (r
       return;
     }
 
-    const tx = await runAsOwner((nonce) => getOwnerContract().createMarket(market.id, { nonce }));
-    await tx.wait();
+    await createOnChainMarket(market.id, "BINARY");
     res.json({ ok: true });
   } catch (err) {
     if (isBlockchainUnavailable(err)) {

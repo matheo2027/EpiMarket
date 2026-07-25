@@ -5,6 +5,7 @@ import { prisma } from "../src/prisma.js";
 import { signToken } from "../src/jwt.js";
 
 export async function resetDb() {
+  await prisma.marketProposal.deleteMany();
   await prisma.ticket.deleteMany();
   await prisma.bet.deleteMany();
   await prisma.pricePoint.deleteMany();
@@ -59,6 +60,23 @@ export async function createBinaryMarket(adminToken: string, overrides: Record<s
     });
   if (res.status !== 201) throw new Error(`createBinaryMarket failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body.market;
+}
+
+export async function createProposal(userToken: string, overrides: Record<string, unknown> = {}) {
+  const res = await request(app)
+    .post("/market-proposals")
+    .set("Authorization", `Bearer ${userToken}`)
+    .send({
+      title: unique("Proposal"),
+      description: "Test proposal",
+      category: "OTHER",
+      yesDescription: "yes",
+      noDescription: "no",
+      ...activeWindow(),
+      ...overrides,
+    });
+  if (res.status !== 201) throw new Error(`createProposal failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return res.body.proposal;
 }
 
 export async function createMultiMarket(adminToken: string, overrides: Record<string, unknown> = {}) {

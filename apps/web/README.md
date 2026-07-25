@@ -37,7 +37,10 @@ message backend inconnu de la table retombe sur l'anglais brut plutôt que de pl
 **Portée volontairement limitée à l'espace public/utilisateur** : l'espace admin (`app/admin/**`,
 `components/market-form.tsx`) reste **en français uniquement**, jamais vu par un visiteur externe ou le
 jury. Ses appels à `errorMessage()` passent `frT` (un raccourci `(key) => translate("fr", key)` exporté
-par `lib/i18n/index.ts`) plutôt qu'un vrai `t()` issu de `useLanguage()`.
+par `lib/i18n/index.ts`) plutôt qu'un vrai `t()` issu de `useLanguage()`. La page `app/proposer/page.tsx`
+(publique, hors admin) réutilise ce même `MarketForm` sans le traduire — seul le contenu autour du
+formulaire (titre, statuts, liste des propositions) suit `useLanguage()` : décision volontaire pour ne
+pas toucher à un composant partagé avec les deux pages admin de création/édition de marché.
 
 **Pourquoi certaines pages publiques ont un composant `*-content.tsx` séparé** : `page.tsx` (accueil),
 `marches/page.tsx`, `marches/[id]/page.tsx` et `classement/page.tsx` restent des Server Components qui
@@ -69,11 +72,15 @@ src/app/
                                 (avec bouton "Retirer" sur un pari en cours — remboursement intégral
                                 avant résolution, pas une vente au prix du marché)
   support/page.tsx             signaler un problème (ticket) + suivi de ses propres tickets
+  proposer/page.tsx            proposer un marché (réutilise MarketForm) + suivi de ses propres
+                                propositions (statut, note admin si rejetée) — modération admin et/ou
+                                via un bot Discord, voir apps/discord-bot/README.md
   admin/                       réservé aux comptes role=ADMIN (garde côté client dans admin/layout.tsx)
     marches/                   CRUD marché + conclure un marché
     paris/                     liste de tous les paris (mise, camp, gain, hash de transaction)
     utilisateurs/              CRUD utilisateurs
     tickets/                   traiter les tickets de support (statut, note)
+    propositions/              modérer les marchés proposés par les utilisateurs (approuver/rejeter)
     diagnostics/               cohérence base ↔ blockchain, avec actions de resynchronisation
 ```
 
