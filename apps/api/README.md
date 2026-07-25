@@ -44,7 +44,8 @@ de lecture), retrait de pari avant résolution (remboursement, double-retrait re
 du calcul de résolution), favoris, commentaires, classement, propositions de marché (soumission,
 approbation/rejet admin et via le secret interne du bot, idempotence, listing propre à l'utilisateur vs
 `?all=true` admin, cycle notify/sync utilisé par le bot), tickets (création liée à un pari/marché,
-permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), CRUD utilisateurs
+permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), flux Discord "paris"
+(`GET /bets/unnotified` séparant placés/retirés, `PATCH /bets/:id/notify`, secret interne requis), CRUD utilisateurs
 (création avec/sans wallet selon le rôle, doublons, permissions, suppression bloquée si l'utilisateur a
 déjà parié ou si c'est son propre compte admin, stats globales), diagnostics (détection d'un marché
 BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, et
@@ -134,6 +135,8 @@ Un pari placé par un utilisateur sur un marché.
 | `createdAt`   | `DateTime` |                                             |
 | `chainIndex`  | `Int`      | index de ce pari dans le tableau on-chain (`marketBets`/`multiMarketBets`), capturé depuis l'event `BetPlaced`/`MultiBetPlaced` à la création — sert à cibler ce pari précis pour un retrait (`withdrawBet`/`withdrawMultiBet`) |
 | `withdrawnAt` | `DateTime?` | posé si l'utilisateur a annulé ce pari avant résolution (voir `POST /bets/:id/withdraw` plus bas) — `null` sinon |
+| `discordNotifiedAt` | `DateTime?` | posé une fois le pari annoncé dans le flux Discord "paris" (`GET /bets/unnotified`, voir `apps/discord-bot/README.md`) |
+| `discordWithdrawNotifiedAt` | `DateTime?` | idem pour l'annonce du retrait — champ séparé car les deux évènements (placé/retiré) n'arrivent pas forcément au même moment |
 | `userId`      | `String`   | FK vers `User`                             |
 | `marketId`    | `String`   | FK vers `Market`                           |
 
@@ -252,6 +255,11 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
   « Vos paris sur ce marché » de la page de détail, voir `apps/web/README.md`) ; combinable avec `status`
 - `GET /bets?all=true` — (admin) tous les paris, tous utilisateurs confondus
 - `GET /bets/:id` — un pari (propriétaire ou admin)
+- `GET /bets/unnotified` — (interne, `requireInternal`) `{ placed, withdrawn }` : paris pas encore
+  annoncés dans le flux Discord "paris" (voir plus bas et `apps/discord-bot/README.md`). Déclarée avant
+  `GET /bets/:id` pour la même raison que `GET /users/leaderboard` plus haut.
+- `PATCH /bets/:id/notify` — (interne) `{ event: "placed" | "withdrawn" }`, marque l'annonce
+  correspondante comme faite pour ce pari.
 - `GET /users`, `POST /users`, `PATCH /users/:id`, `DELETE /users/:id` — (admin) CRUD utilisateurs. `DELETE` refusé si l'utilisateur a déjà des paris, ou si tu essaies de te supprimer toi-même. `PATCH` ne permet plus de modifier `walletBalance` (c'est un miroir on-chain, l'éditer directement n'aurait aucun effet durable).
 - `GET /users/:id` — soi-même ou admin
 - `GET /users/stats` — (admin) compteurs globaux (utilisateurs, marchés ouverts/résolus, paris, volume) pour le bandeau en haut des pages admin.

@@ -10,7 +10,7 @@ Pour une prise en main pas à pas du site (compte, paris, portefeuille, espace a
 - **Backend** : Node.js / Express (TypeScript) — `apps/api`
 - **Base de données** : PostgreSQL, via Prisma ORM (miroir de l'état on-chain, pas la source de vérité pour l'argent)
 - **Blockchain** : Hardhat (réseau Ethereum local) + contrat `EpiMarket` en Solidity — `apps/blockchain`
-- **Bot de modération** : discord.js (TypeScript) — `apps/discord-bot`
+- **Bots Discord** (modération des propositions + annonce des paris) : discord.js (TypeScript) — `apps/discord-bot`
 - **Monorepo** : npm workspaces
 
 ## Prérequis
@@ -26,7 +26,7 @@ npm install
 
 Puis créer les fichiers `.env` (non versionnés) avec les variables suivantes :
 
-**`.env`** (racine — identifiants PostgreSQL utilisés par Docker Compose, plus les variables du bot Discord) :
+**`.env`** (racine — identifiants PostgreSQL utilisés par Docker Compose, plus les variables des bots Discord) :
 
 ```
 POSTGRES_USER=epimarket
@@ -34,8 +34,10 @@ POSTGRES_PASSWORD=epimarket
 POSTGRES_DB=epimarket
 POSTGRES_PORT=5432
 
-DISCORD_BOT_TOKEN=<token du bot, voir apps/discord-bot/README.md>
+DISCORD_BOT_TOKEN=<token du bot de modération, voir apps/discord-bot/README.md>
 DISCORD_CHANNEL_ID=<id du salon Discord où poster les propositions>
+BETS_DISCORD_BOT_TOKEN=<token du bot paris — application Discord séparée>
+BETS_DISCORD_CHANNEL_ID=<id du salon Discord où annoncer les paris>
 INTERNAL_API_SECRET=<valeur aléatoire, identique à celle d'apps/api/.env>
 DISCORD_BOT_API_BASE_URL=http://host.docker.internal:4000
 ```
@@ -67,7 +69,7 @@ Voir [`apps/api/README.md`](apps/api/README.md) pour le détail du schéma de ba
 npm run dev
 ```
 
-Cela démarre PostgreSQL, le nœud Hardhat et le bot Discord (Docker), l'API (`http://localhost:4000`) et le frontend (`http://localhost:3000`) en parallèle. Le contrat `EpiMarket` est déployé automatiquement au démarrage du service `hardhat`. Sans `DISCORD_BOT_TOKEN` valide, le service `discord-bot` plante en boucle (`restart: unless-stopped`) sans affecter le reste — voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md) pour le créer.
+Cela démarre PostgreSQL, le nœud Hardhat et les deux bots Discord (Docker), l'API (`http://localhost:4000`) et le frontend (`http://localhost:3000`) en parallèle. Le contrat `EpiMarket` est déployé automatiquement au démarrage du service `hardhat`. Sans token valide, le service `discord-bot` ou `bets-bot` plante en boucle (`restart: unless-stopped`) sans affecter le reste — voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md) pour les créer.
 
 Vous pouvez aussi lancer chaque service séparément :
 
@@ -107,7 +109,7 @@ Sur Windows, `npm run dev` lance aussi un script (`scripts/fix-wsl-docker-offloa
 
 **Côté admin** (`/admin`, compte avec `role: ADMIN`) : CRUD marché — binaire (oui/non) ou à options multiples (3 à 6, ex. "qui remporte le tournoi ?") — (créer/éditer/supprimer — un marché résolu ne peut plus être ni édité ni supprimé), conclure un marché (règle les gains automatiquement via le contrat, et peut être rappelé pour rattraper une synchronisation qui aurait échoué), liste des paris, CRUD utilisateurs, gestion des tickets de support (changer le statut, répondre), un onglet **Propositions** pour modérer les marchés proposés par les utilisateurs (approuver crée le vrai marché, rejeter avec une note optionnelle — les mêmes décisions sont aussi accessibles depuis Discord, voir plus bas), et un tableau de bord **Diagnostics** qui détecte automatiquement les désynchronisations entre la base et la blockchain (marché absent on-chain, pari résolu sans gain calculé, solde utilisateur qui a dérivé) avec une action de correction en un clic pour chacune. Un admin n'a pas de portefeuille et ne peut pas parier (il peut créer/résoudre les marchés, donc pas parier dessus sans conflit d'intérêt).
 
-**Bot Discord** (`apps/discord-bot`) : chaque proposition de marché déclenche un message posté par un bot Discord persistant dans un salon d'un serveur réservé aux admins, avec des boutons Approuver/Rejeter — pratique pour modérer sans ouvrir le site. Voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md).
+**Bots Discord** (`apps/discord-bot`) : chaque proposition de marché déclenche un message posté par un bot persistant dans un salon d'un serveur réservé aux admins, avec des boutons Approuver/Rejeter — pratique pour modérer sans ouvrir le site. Un second bot, dans un autre salon du même serveur, annonce en lecture seule chaque pari placé ou retiré (utilisateur, mise, marché) — purement informatif, aucune action possible depuis Discord. Voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md).
 
 ## Structure
 
@@ -116,6 +118,6 @@ apps/
   api/          # Backend Express + Prisma — voir apps/api/README.md
   web/          # Frontend Next.js — voir apps/web/README.md
   blockchain/   # Contrat Hardhat/Solidity — voir apps/blockchain/README.md
-  discord-bot/  # Bot de modération des propositions de marché — voir apps/discord-bot/README.md
-docker-compose.yml   # PostgreSQL + nœud Hardhat local + bot Discord
+  discord-bot/  # Bots Discord (modération des propositions + annonce des paris) — voir apps/discord-bot/README.md
+docker-compose.yml   # PostgreSQL + nœud Hardhat local + 2 bots Discord
 ```
