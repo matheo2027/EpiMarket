@@ -149,6 +149,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
             chainIndex,
           },
         });
+        await tx.discordNotification.create({ data: { eventType: "BET_PLACED", entityId: bet.id } });
 
         for (let i = 0; i < market.options.length; i++) {
           await tx.marketOption.update({
@@ -199,6 +200,7 @@ betsRouter.post("/", requireAuth, async (req, res) => {
           chainIndex,
         },
       });
+      await tx.discordNotification.create({ data: { eventType: "BET_PLACED", entityId: bet.id } });
 
       const updatedMarket = await tx.market.update({
         where: { id: market.id },
@@ -299,6 +301,7 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
           where: { id: bet.id },
           data: { withdrawnAt: new Date(), payout: bet.amount },
         });
+        await tx.discordNotification.create({ data: { eventType: "BET_WITHDRAWN", entityId: bet.id } });
         for (let i = 0; i < options.length; i++) {
           await tx.marketOption.update({ where: { id: options[i].id }, data: { pool: fromChainAmount(pools[i]) } });
         }
@@ -328,6 +331,7 @@ betsRouter.post("/:id/withdraw", requireAuth, async (req, res) => {
         where: { id: bet.id },
         data: { withdrawnAt: new Date(), payout: bet.amount },
       });
+      await tx.discordNotification.create({ data: { eventType: "BET_WITHDRAWN", entityId: bet.id } });
       const updatedMarket = await tx.market.update({
         where: { id: bet.marketId },
         data: {
@@ -408,20 +412,29 @@ const MAX_UNNOTIFIED_PER_FEED = 100;
 // withdrawn) since a bet can need either announcement at a different time.
 // Declared before GET /:id (a literal path, "/:id" would otherwise swallow it —
 // same footgun as GET /users/leaderboard, see apps/api/README.md).
+// Looks up the (Bet-shaped) rows for a batch of unnotified DiscordNotification
+// entries and re-orders them to match — findMany({ where: { id: { in } } })
+// doesn't preserve the input array's order.
+async function loadUnnotifiedBets(eventType: "BET_PLACED" | "BET_WITHDRAWN") {
+  const notifications = await prisma.discordNotification.findMany({
+    where: { eventType, notifiedAt: null },
+    orderBy: { createdAt: "asc" },
+    take: MAX_UNNOTIFIED_PER_FEED,
+  });
+  if (notifications.length === 0) return [];
+
+  const bets = await prisma.bet.findMany({
+    where: { id: { in: notifications.map((n) => n.entityId) } },
+    include: betFeedInclude,
+  });
+  const betById = new Map(bets.map((bet) => [bet.id, bet]));
+  return notifications.map((n) => betById.get(n.entityId)).filter((bet) => bet !== undefined);
+}
+
 betsRouter.get("/unnotified", requireInternal, async (_req, res) => {
   const [placed, withdrawn] = await Promise.all([
-    prisma.bet.findMany({
-      where: { discordNotifiedAt: null },
-      include: betFeedInclude,
-      orderBy: { createdAt: "asc" },
-      take: MAX_UNNOTIFIED_PER_FEED,
-    }),
-    prisma.bet.findMany({
-      where: { withdrawnAt: { not: null }, discordWithdrawNotifiedAt: null },
-      include: betFeedInclude,
-      orderBy: { withdrawnAt: "asc" },
-      take: MAX_UNNOTIFIED_PER_FEED,
-    }),
+    loadUnnotifiedBets("BET_PLACED"),
+    loadUnnotifiedBets("BET_WITHDRAWN"),
   ]);
   res.json({ placed, withdrawn });
 });
@@ -433,10 +446,16 @@ betsRouter.patch("/:id/notify", requireInternal, async (req, res) => {
     return;
   }
 
-  const bet = await prisma.bet.update({
-    where: { id: req.params.id },
-    data: event === "placed" ? { discordNotifiedAt: new Date() } : { discordWithdrawNotifiedAt: new Date() },
+  await prisma.discordNotification.update({
+    where: {
+      eventType_entityId: {
+        eventType: event === "placed" ? "BET_PLACED" : "BET_WITHDRAWN",
+        entityId: req.params.id,
+      },
+    },
+    data: { notifiedAt: new Date() },
   });
+  const bet = await prisma.bet.findUniqueOrThrow({ where: { id: req.params.id } });
   res.json({ bet });
 });
 

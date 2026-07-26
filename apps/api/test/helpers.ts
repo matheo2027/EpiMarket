@@ -5,6 +5,7 @@ import { prisma } from "../src/prisma.js";
 import { signToken } from "../src/jwt.js";
 
 export async function resetDb() {
+  await prisma.discordNotification.deleteMany();
   await prisma.marketProposal.deleteMany();
   await prisma.ticket.deleteMany();
   await prisma.bet.deleteMany();

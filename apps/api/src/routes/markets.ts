@@ -1,13 +1,18 @@
 import { Router } from "express";
 import { MarketCategory, MarketStatus, type MarketOption } from "@prisma/client";
 import { prisma } from "../prisma.js";
-import { currentUserRole, requireAdmin, requireAuth } from "../middleware/auth.js";
+import { currentUserRole, requireAdmin, requireAuth, requireInternalSecret } from "../middleware/auth.js";
 import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
 import { runAsOwner } from "../blockchain/provider.js";
 import { fromChainAmount } from "../blockchain/units.js";
 import { createMarketFromFields, optionsOrder, serializeMarket, validateMarketInput } from "../marketCreation.js";
 
 export const marketsRouter = Router();
+
+const requireInternalResolutions = requireInternalSecret("INTERNAL_API_SECRET_RESOLUTIONS");
+
+// Same cap as the bets feed (src/routes/bets.ts) — bounds one poll tick against a backlog.
+const MAX_UNNOTIFIED_RESOLUTIONS = 100;
 
 const CATEGORIES = Object.values(MarketCategory);
 const STATUSES = Object.values(MarketStatus);
@@ -111,6 +116,39 @@ marketsRouter.get("/stats/history", async (_req, res) => {
   }
 
   res.json({ history });
+});
+
+// Feeds the "resolutions" Discord bot (apps/discord-bot/src/resolutions-bot) —
+// same notify/mark-notified polling pattern as the bets feed, backed by the
+// generic DiscordNotification table (see prisma/schema.prisma). Declared
+// before GET /:id (a literal path, "/:id" would otherwise swallow it — same
+// footgun as GET /users/leaderboard, see apps/api/README.md).
+marketsRouter.get("/unnotified-resolutions", requireInternalResolutions, async (_req, res) => {
+  const notifications = await prisma.discordNotification.findMany({
+    where: { eventType: "MARKET_RESOLVED", notifiedAt: null },
+    orderBy: { createdAt: "asc" },
+    take: MAX_UNNOTIFIED_RESOLUTIONS,
+  });
+  if (notifications.length === 0) {
+    res.json({ markets: [] });
+    return;
+  }
+
+  const markets = await prisma.market.findMany({
+    where: { id: { in: notifications.map((n) => n.entityId) } },
+    include: optionsOrder,
+  });
+  const marketById = new Map(markets.map((m) => [m.id, m]));
+  const ordered = notifications.map((n) => marketById.get(n.entityId)).filter((m) => m !== undefined);
+  res.json({ markets: ordered.map(serializeMarket) });
+});
+
+marketsRouter.patch("/:id/notify-resolution", requireInternalResolutions, async (req, res) => {
+  await prisma.discordNotification.update({
+    where: { eventType_entityId: { eventType: "MARKET_RESOLVED", entityId: req.params.id } },
+    data: { notifiedAt: new Date() },
+  });
+  res.status(204).send();
 });
 
 marketsRouter.get("/:id", async (req, res) => {
@@ -443,6 +481,15 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
         res.status(502).json({ error: revertReason(err) ?? "Could not resolve the on-chain market" });
         return;
       }
+
+      // Recorded only here (first successful OPEN → RESOLVED transition,
+      // guarded by the updateMany above), not in the resync retry path — a
+      // market resolves once, so there's nothing to re-announce. Kept outside
+      // the on-chain try/catch above: a failure here is a Postgres bookkeeping
+      // issue, not an on-chain resolution failure, and must not trigger the
+      // "revert to OPEN" recovery path for a resolution that already succeeded
+      // on-chain.
+      await prisma.discordNotification.create({ data: { eventType: "MARKET_RESOLVED", entityId: existing.id } });
     }
 
     const bets = await prisma.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
