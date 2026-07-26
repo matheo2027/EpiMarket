@@ -2,10 +2,15 @@ import { Router } from "express";
 import { MarketCategory, MarketStatus, type MarketOption } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { currentUserRole, requireAdmin, requireAuth, requireInternalSecret } from "../middleware/auth.js";
-import { getOnChainBalance, getOwnerContract, getReadOnlyContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
+import { getOwnerContract, revertReason, sideToOutcome } from "../blockchain/contract.js";
 import { runAsOwner } from "../blockchain/provider.js";
-import { fromChainAmount } from "../blockchain/units.js";
-import { createMarketFromFields, optionsOrder, serializeMarket, validateMarketInput } from "../marketCreation.js";
+import {
+  createMarketFromFields,
+  optionsOrder,
+  resyncResolvedMarketPayouts,
+  serializeMarket,
+  validateMarketInput,
+} from "../marketCreation.js";
 
 export const marketsRouter = Router();
 
@@ -492,41 +497,7 @@ marketsRouter.post("/:id/resolve", requireAuth, requireAdmin, async (req, res) =
       await prisma.discordNotification.create({ data: { eventType: "MARKET_RESOLVED", entityId: existing.id } });
     }
 
-    const bets = await prisma.bet.findMany({ where: { marketId: existing.id }, orderBy: { id: "asc" } });
-    const readContract = getReadOnlyContract();
-    const payouts = await Promise.all(
-      bets.map(async (bet) => {
-        // Already settled by an earlier withdrawal — skip, don't overwrite the
-        // refund with the contract's untouched (0) payout for that bet.
-        if (bet.withdrawnAt) return null;
-        const result =
-          existing.type === "MULTI"
-            ? await readContract.getMultiBet(existing.id, bet.chainIndex)
-            : await readContract.getBet(existing.id, bet.chainIndex);
-        return fromChainAmount(result[3]);
-      }),
-    );
-
-    const bettorIds = [...new Set(bets.map((bet) => bet.userId))];
-    const bettors = await prisma.user.findMany({ where: { id: { in: bettorIds } } });
-    const balanceEntries = await Promise.all(
-      bettors
-        .filter((bettor) => bettor.walletAddress)
-        .map(async (bettor) => [bettor.id, await getOnChainBalance(bettor.walletAddress!)] as const),
-    );
-    const balances = new Map(balanceEntries);
-
-    const market = await prisma.$transaction(async (dbTx) => {
-      for (let i = 0; i < bets.length; i++) {
-        if (payouts[i] === null) continue;
-        await dbTx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
-      }
-      for (const [userId, walletBalance] of balances) {
-        await dbTx.user.update({ where: { id: userId }, data: { walletBalance } });
-      }
-      return dbTx.market.findUniqueOrThrow({ where: { id: existing.id }, include: optionsOrder });
-    });
-
+    const market = await resyncResolvedMarketPayouts(existing);
     res.json({ market: serializeMarket(market) });
   } catch (err) {
     console.error("Market resolved on-chain but syncing Postgres failed:", err);

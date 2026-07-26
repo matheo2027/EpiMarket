@@ -1,8 +1,16 @@
 import { MarketCategory, MarketType, type Market, type MarketOption } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { computeOptionPrices, computePrices } from "./pricing.js";
-import { BLOCKCHAIN_NOT_READY_MESSAGE, getOwnerContract, isContractDeployed, revertReason } from "./blockchain/contract.js";
+import {
+  BLOCKCHAIN_NOT_READY_MESSAGE,
+  getOnChainBalance,
+  getOwnerContract,
+  getReadOnlyContract,
+  isContractDeployed,
+  revertReason,
+} from "./blockchain/contract.js";
 import { runAsOwner } from "./blockchain/provider.js";
+import { fromChainAmount } from "./blockchain/units.js";
 
 export const MIN_OPTIONS = 3;
 export const MAX_OPTIONS = 6;
@@ -23,6 +31,63 @@ export async function createOnChainMarket(id: string, type: MarketType, optionCo
       ? await runAsOwner((nonce) => getOwnerContract().createMultiMarket(id, optionCount!, { nonce }))
       : await runAsOwner((nonce) => getOwnerContract().createMarket(id, { nonce }));
   await tx.wait();
+}
+
+/** Shared by the diagnostics "resync one market" and "resync everything" routes — same exists-check either way. */
+export async function marketExistsOnChain(market: { id: string; type: MarketType }): Promise<boolean> {
+  const readContract = getReadOnlyContract();
+  if (market.type === "MULTI") {
+    const onChain = await readContract.getMultiMarket(market.id);
+    return Boolean(onChain.exists ?? onChain[4]);
+  }
+  const onChain = await readContract.markets(market.id);
+  return Boolean(onChain.exists ?? onChain[5]);
+}
+
+/**
+ * Recomputes `payout` for every not-withdrawn bet on an already-resolved
+ * market by re-reading each bet from the contract (the source of truth for
+ * the amount), then syncs the affected bettors' balances — the same "Postgres
+ * half of resolution" tail used by `POST /markets/:id/resolve`'s resync path
+ * (payout sync failed on a previous call) and by the diagnostics "resync
+ * everything" bulk action (chain wiped by a Hardhat restart, Postgres still
+ * says RESOLVED with no payout computed).
+ */
+export async function resyncResolvedMarketPayouts(market: { id: string; type: MarketType }) {
+  const bets = await prisma.bet.findMany({ where: { marketId: market.id }, orderBy: { id: "asc" } });
+  const readContract = getReadOnlyContract();
+  const payouts = await Promise.all(
+    bets.map(async (bet) => {
+      // Already settled by an earlier withdrawal — skip, don't overwrite the
+      // refund with the contract's untouched (0) payout for that bet.
+      if (bet.withdrawnAt) return null;
+      const result =
+        market.type === "MULTI"
+          ? await readContract.getMultiBet(market.id, bet.chainIndex)
+          : await readContract.getBet(market.id, bet.chainIndex);
+      return fromChainAmount(result[3]);
+    }),
+  );
+
+  const bettorIds = [...new Set(bets.map((bet) => bet.userId))];
+  const bettors = await prisma.user.findMany({ where: { id: { in: bettorIds } } });
+  const balanceEntries = await Promise.all(
+    bettors
+      .filter((bettor) => bettor.walletAddress)
+      .map(async (bettor) => [bettor.id, await getOnChainBalance(bettor.walletAddress!)] as const),
+  );
+  const balances = new Map(balanceEntries);
+
+  return prisma.$transaction(async (dbTx) => {
+    for (let i = 0; i < bets.length; i++) {
+      if (payouts[i] === null) continue;
+      await dbTx.bet.update({ where: { id: bets[i].id }, data: { payout: payouts[i] } });
+    }
+    for (const [userId, walletBalance] of balances) {
+      await dbTx.user.update({ where: { id: userId }, data: { walletBalance } });
+    }
+    return dbTx.market.findUniqueOrThrow({ where: { id: market.id }, include: optionsOrder });
+  });
 }
 
 export function validateOptionLabels(options: unknown): string[] | null {

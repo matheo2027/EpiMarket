@@ -123,4 +123,65 @@ describe("diagnostics", () => {
     const reportAfter = await request(app).get("/diagnostics").set("Authorization", `Bearer ${admin.token}`);
     expect(reportAfter.body.balanceDrift.find((d: { id: string }) => d.id === user.user.id)).toBeUndefined();
   });
+
+  it("resync-all fixes an unsynced market, a stuck bet, and a balance drift in one call", async () => {
+    const admin = await createAdmin();
+    const bettor = await registerUser("resyncallbettor");
+    const window = activeWindow();
+
+    // 1. A market that only exists in Postgres (chain wiped by a Hardhat restart).
+    const ghostMarket = await prisma.market.create({
+      data: {
+        title: unique("Ghost-ResyncAll"),
+        description: "d",
+        category: "OTHER",
+        yesDescription: "yes",
+        noDescription: "no",
+        startDate: new Date(window.startDate),
+        endDate: new Date(window.endDate),
+      },
+    });
+
+    // 2. A resolved market with a bet whose payout was never computed.
+    const stuckMarket = await createBinaryMarket(admin.token);
+    await request(app)
+      .post("/bets")
+      .set("Authorization", `Bearer ${bettor.token}`)
+      .send({ marketId: stuckMarket.id, side: "YES", amount: 10 });
+    await prisma.market.update({ where: { id: stuckMarket.id }, data: { status: "RESOLVED", resolvedOutcome: "YES" } });
+
+    // 3. A wallet balance that no longer matches the chain.
+    const realBalance = Number(bettor.user.walletBalance);
+    await prisma.user.update({ where: { id: bettor.user.id }, data: { walletBalance: realBalance - 500 } });
+
+    const before = await request(app).get("/diagnostics").set("Authorization", `Bearer ${admin.token}`);
+    expect(before.body.unsyncedMarkets.map((m: { id: string }) => m.id)).toContain(ghostMarket.id);
+    expect(before.body.stuckBets.some((b: { marketId: string }) => b.marketId === stuckMarket.id)).toBe(true);
+    expect(before.body.balanceDrift.some((d: { id: string }) => d.id === bettor.user.id)).toBe(true);
+
+    const resyncAll = await request(app).post("/diagnostics/resync-all").set("Authorization", `Bearer ${admin.token}`);
+    expect(resyncAll.status).toBe(200);
+    expect(resyncAll.body.markets.recreated).toBeGreaterThanOrEqual(1);
+    expect(resyncAll.body.markets.failed).toHaveLength(0);
+    expect(resyncAll.body.bets.resynced).toBeGreaterThanOrEqual(1);
+    expect(resyncAll.body.bets.failed).toHaveLength(0);
+    expect(resyncAll.body.balances.resynced).toBeGreaterThanOrEqual(1);
+    expect(resyncAll.body.balances.failed).toHaveLength(0);
+
+    const after = await request(app).get("/diagnostics").set("Authorization", `Bearer ${admin.token}`);
+    expect(after.body.unsyncedMarkets.map((m: { id: string }) => m.id)).not.toContain(ghostMarket.id);
+    expect(after.body.stuckBets.some((b: { marketId: string }) => b.marketId === stuckMarket.id)).toBe(false);
+    expect(after.body.balanceDrift.some((d: { id: string }) => d.id === bettor.user.id)).toBe(false);
+  });
+
+  it("resync-all is a no-op that reports zero actions when nothing is desynced", async () => {
+    const admin = await createAdmin();
+    const resyncAll = await request(app).post("/diagnostics/resync-all").set("Authorization", `Bearer ${admin.token}`);
+    expect(resyncAll.status).toBe(200);
+    expect(resyncAll.body).toEqual({
+      markets: { recreated: 0, failed: [] },
+      bets: { resynced: 0, failed: [] },
+      balances: { resynced: 0, failed: [] },
+    });
+  });
 });

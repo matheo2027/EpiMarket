@@ -50,14 +50,16 @@ Discord "résolutions" (`GET /markets/unnotified-resolutions`, `PATCH /markets/:
 secret interne propre à ce bot, pas de doublon de notification sur un appel de resync), CRUD utilisateurs
 (création avec/sans wallet selon le rôle, doublons, permissions, suppression bloquée si l'utilisateur a
 déjà parié ou si c'est son propre compte admin, stats globales), diagnostics (détection d'un marché
-BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, et
-les trois actions de resynchronisation correspondantes — désynchronisations simulées par une écriture
-Postgres directe, en contournant volontairement les routes qui gardent normalement base et chaîne
-synchronisées, pour reproduire ce qui se passe réellement lors d'un redémarrage de la chaîne Hardhat),
-et un contrôle direct de `isContractDeployed()` (le vrai contrat déployé est bien détecté comme prêt,
-et une adresse sans code renvoie bien un bytecode vide — la simulation complète "contrat pas encore là"
-a été vérifiée manuellement plutôt qu'en automatisé, pour ne pas perturber la chaîne Hardhat partagée par
-tous les autres tests).
+BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, les
+trois actions de resynchronisation correspondantes, et `POST /diagnostics/resync-all` qui les regroupe —
+désynchronisations simulées par une écriture Postgres directe, en contournant volontairement les routes
+qui gardent normalement base et chaîne synchronisées, pour reproduire ce qui se passe réellement lors
+d'un redémarrage de la chaîne Hardhat), un contrôle direct de `isContractDeployed()` (le vrai contrat
+déployé est bien détecté comme prêt, et une adresse sans code renvoie bien un bytecode vide — la
+simulation complète "contrat pas encore là" a été vérifiée manuellement plutôt qu'en automatisé, pour ne
+pas perturber la chaîne Hardhat partagée par tous les autres tests), et le cache de nonce
+(`noteContractAddress()` — préserve le nonce en cache tant que l'adresse du contrat ne change pas, le
+vide entièrement dès qu'elle change, avec de vrais wallets jetables plutôt que des mocks).
 
 ## Schéma
 
@@ -331,7 +333,17 @@ directe, impossible sur une relation polymorphe.
 - `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain (`BINARY` et `MULTI` tous deux vérifiés), paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
 - `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket` pour `BINARY`, `createMultiMarket` pour `MULTI`).
 - `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
-- Les trois routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
+- `POST /diagnostics/resync-all` — (admin) version "tout en un" des deux routes précédentes plus la
+  resynchronisation des paris bloqués (`resyncResolvedMarketPayouts` dans `src/marketCreation.ts`, la
+  même fonction que le chemin de resync de `POST /markets/:id/resolve`) : recrée tous les marchés
+  manquants, resynchronise tous les paris sans `payout`, réaligne tous les soldes désynchronisés, en un
+  seul appel. Utile après un redémarrage du nœud Hardhat, qui peut désynchroniser plusieurs éléments à la
+  fois (voir la section blockchain plus bas). Chaque élément est traité indépendamment (un échec
+  n'interrompt pas les autres) et la réponse détaille les succès/échecs par catégorie
+  (`{ markets: { recreated, failed }, bets: { resynced, failed }, balances: { resynced, failed } }`) —
+  jamais d'échec avalé silencieusement, puisque ce sont de vraies écritures on-chain qui peuvent
+  individuellement échouer.
+- Les quatre routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
 
 ## Règlement des gains (settlement)
 
@@ -380,6 +392,15 @@ déploiement. Ici, le résumé côté backend :
   même si `getTransactionCount()` renvoie la bonne valeur au moment de l'appel. `src/routes/bets.ts`
   passe donc toujours par `runAsSender(walletAddress, ...)` plutôt que d'appeler `getUserContract(user)`
   directement.
+- **Ce cache de nonce ne survit pas à un redéploiement du contrat.** Un redémarrage du conteneur
+  `hardhat` remet la chain à zéro (tous les nonces repartent de 0) mais pas ce process API, qui garde son
+  cache en mémoire — sans protection, le premier envoi après coup se voit rejeté (`"Nonce too low"`),
+  échec que `provisionNewWallet` avale silencieusement (utilisateur créé avec un solde à 0 sans erreur
+  visible). `noteContractAddress()` (`src/blockchain/provider.ts`), appelée depuis `getDeployment()` à
+  chaque lecture de `deployment.json`, détecte le changement d'adresse et vide tout le cache de nonces
+  (tous les comptes, pas seulement l'owner) dès que ce changement est observé — généralement avant le
+  prochain envoi plutôt qu'après son échec. Testé directement dans `test/nonce-cache.test.ts` (sans
+  toucher à la vraie chain partagée par le reste de la suite).
 - Chaque nouveau compte est crédité en ETH de test (`fundWallet`) pour payer le gas de ses futures
   transactions, distribué par le compte owner du contrat — pas de vraie économie de gas à gérer sur un
   réseau local.

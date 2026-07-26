@@ -24,6 +24,26 @@ export function getFunderWallet(): ethers.Wallet {
 const addressNonces = new Map<string, number>();
 const addressQueues = new Map<string, Promise<void>>();
 
+let lastKnownContractAddress: string | undefined;
+
+/**
+ * Hardhat resets every account's nonce to 0 when its container restarts and
+ * redeploys the contract to a new address (apps/blockchain/README.md#limites-assumées-du-poc),
+ * but this process's in-memory nonce cache survives that restart — the next
+ * send for any address would use its old, now-too-high nonce and get
+ * rejected ("Nonce too low"), which callers like `provisionNewWallet` catch
+ * and log rather than surface, so it can silently leave a user under-funded.
+ * Called from contract.ts#getDeployment(), the one choke point every
+ * contract-touching call already goes through, so a redeploy is caught
+ * before the next send rather than only after it fails once.
+ */
+export function noteContractAddress(address: string): void {
+  if (lastKnownContractAddress !== undefined && lastKnownContractAddress !== address) {
+    addressNonces.clear();
+  }
+  lastKnownContractAddress = address;
+}
+
 /**
  * Serializes every transaction sent from `address` and tracks its nonce
  * locally instead of trusting a fresh `getTransactionCount()` at send time —

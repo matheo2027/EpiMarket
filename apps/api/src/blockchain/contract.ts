@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ethers } from "ethers";
 import type { User } from "@prisma/client";
-import { provider, getFunderWallet, runAsOwner } from "./provider.js";
+import { provider, getFunderWallet, noteContractAddress, runAsOwner } from "./provider.js";
 import { decryptPrivateKey, fundWallet } from "./wallet.js";
 import { fromChainAmount, toChainAmount } from "./units.js";
 import { prisma } from "../prisma.js";
@@ -27,13 +27,16 @@ type Deployment = { address: string; abi: ethers.InterfaceAbi };
  */
 function getDeployment(): Deployment {
   const filePath = path.join(__dirname, "deployment.json");
+  let deployment: Deployment;
   try {
-    return JSON.parse(readFileSync(filePath, "utf8"));
+    deployment = JSON.parse(readFileSync(filePath, "utf8"));
   } catch {
     throw new Error(
       `Could not read ${filePath} - has "npm run deploy:localhost" (or the hardhat docker service) run yet?`,
     );
   }
+  noteContractAddress(deployment.address);
+  return deployment;
 }
 
 /**
