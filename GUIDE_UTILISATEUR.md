@@ -211,6 +211,13 @@ Un tableau de bord qui détecte automatiquement les cas où la base de données 
 
 Si tout est cohérent, chaque section affiche simplement une coche verte. Chaque bouton de correction déclenche une vraie action (transaction blockchain ou relecture du solde réel) et demande une confirmation avant de s'exécuter, comme les autres actions sensibles de l'espace admin.
 
+En haut de la page, le bouton **Tout recréer on-chain** effectue en un seul clic les trois corrections
+ci-dessus pour tout ce qui est désynchronisé (utile après un redémarrage de la chaîne de test, qui peut
+désynchroniser plusieurs marchés/paris/soldes à la fois plutôt qu'un seul) : recrée tous les marchés
+manquants, resynchronise tous les paris bloqués et réaligne tous les soldes, puis affiche un résumé
+(nombre d'éléments corrigés dans chaque catégorie, et le détail de tout échec individuel — une action
+blockchain peut échouer même si les autres réussissent). Grisé s'il n'y a rien à corriger.
+
 Si vous ouvrez cette page juste après avoir démarré le projet, un message "Blockchain locale en cours de démarrage…" peut s'afficher quelques secondes : la page réessaie toute seule en arrière-plan, pas besoin de recharger.
 
 Toutes les actions destructrices ou irréversibles (conclure, supprimer, resynchroniser) demandent une confirmation via une fenêtre du site avant d'être exécutées.
