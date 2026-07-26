@@ -38,8 +38,11 @@ DISCORD_BOT_TOKEN=<token du bot de modération, voir apps/discord-bot/README.md>
 DISCORD_CHANNEL_ID=<id du salon Discord où poster les propositions>
 BETS_DISCORD_BOT_TOKEN=<token du bot paris — application Discord séparée>
 BETS_DISCORD_CHANNEL_ID=<id du salon Discord où annoncer les paris>
+RESOLUTIONS_DISCORD_BOT_TOKEN=<token du bot résolutions — application Discord séparée>
+RESOLUTIONS_DISCORD_CHANNEL_ID=<id du salon Discord où annoncer les résolutions de marché>
 INTERNAL_API_SECRET_MODERATION=<valeur aléatoire, identique à celle d'apps/api/.env>
 INTERNAL_API_SECRET_BETS=<autre valeur aléatoire, distincte, identique à celle d'apps/api/.env>
+INTERNAL_API_SECRET_RESOLUTIONS=<autre valeur aléatoire, distincte, identique à celle d'apps/api/.env>
 DISCORD_BOT_API_BASE_URL=http://host.docker.internal:4000
 ```
 
@@ -55,6 +58,7 @@ HARDHAT_RPC_URL="http://127.0.0.1:8545"
 HARDHAT_FUNDER_PRIVATE_KEY="<clé privée du compte owner du contrat>"
 INTERNAL_API_SECRET_MODERATION="<même valeur que dans le .env racine>"
 INTERNAL_API_SECRET_BETS="<même valeur que dans le .env racine>"
+INTERNAL_API_SECRET_RESOLUTIONS="<même valeur que dans le .env racine>"
 ```
 
 **`apps/web/.env`** :
@@ -71,7 +75,7 @@ Voir [`apps/api/README.md`](apps/api/README.md) pour le détail du schéma de ba
 npm run dev
 ```
 
-Cela démarre PostgreSQL, le nœud Hardhat et les deux bots Discord (Docker), l'API (`http://localhost:4000`) et le frontend (`http://localhost:3000`) en parallèle. Le contrat `EpiMarket` est déployé automatiquement au démarrage du service `hardhat`. Sans token valide, le service `discord-bot` ou `bets-bot` plante en boucle (`restart: unless-stopped`) sans affecter le reste — voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md) pour les créer.
+Cela démarre PostgreSQL, le nœud Hardhat et les trois bots Discord (Docker), l'API (`http://localhost:4000`) et le frontend (`http://localhost:3000`) en parallèle. Le contrat `EpiMarket` est déployé automatiquement au démarrage du service `hardhat`. Sans token valide, le service `discord-bot`, `bets-bot` ou `resolutions-bot` plante en boucle (`restart: unless-stopped`) sans affecter le reste — voir [`apps/discord-bot/README.md`](apps/discord-bot/README.md) pour les créer.
 
 Comme l'API répond en ~1s alors que Hardhat met 10-30s à déployer le contrat, les toutes premières
 actions qui touchent la blockchain (placer un pari, créer un marché) peuvent renvoyer une erreur

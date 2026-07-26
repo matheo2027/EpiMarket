@@ -5,7 +5,7 @@ import { ApiError, apiFetch, errorMessage } from "@/lib/api";
 import { frT } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useConfirm } from "@/lib/confirm-context";
-import type { DiagnosticsReport } from "@/lib/types";
+import type { DiagnosticsReport, ResyncAllResult } from "@/lib/types";
 
 const RETRY_DELAY_MS = 3000;
 const MAX_AUTO_RETRIES = 10;
@@ -60,6 +60,8 @@ export default function AdminDiagnosticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [waitingForChain, setWaitingForChain] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [resyncAllResult, setResyncAllResult] = useState<ResyncAllResult | null>(null);
+  const [resyncAllBusy, setResyncAllBusy] = useState(false);
   const retryCount = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadRef = useRef<() => void>(() => {});
@@ -142,10 +144,78 @@ export default function AdminDiagnosticsPage() {
     return <p className="py-8 text-center text-sm text-muted">Chargement…</p>;
   }
 
+  const totalIssues = report.unsyncedMarkets.length + report.stuckBets.length + report.balanceDrift.length;
+  const resyncAllFailures = resyncAllResult
+    ? [
+        ...resyncAllResult.markets.failed.map((f) => `Marché « ${f.title} » : ${f.error}`),
+        ...resyncAllResult.bets.failed.map((f) => `Paris de « ${f.title} » : ${f.error}`),
+        ...resyncAllResult.balances.failed.map((f) => `Solde de ${f.username} : ${f.error}`),
+      ]
+    : [];
+
+  async function runResyncAll() {
+    setActionError(null);
+    const ok = await confirm({
+      title: "Tout recréer on-chain",
+      message: `Recréer les marchés manquants, resynchroniser les paris bloqués et réaligner les soldes désynchronisés — ${totalIssues} élément(s) au total. Continuer ?`,
+      confirmLabel: "Confirmer",
+    });
+    if (!ok) return;
+    setResyncAllBusy(true);
+    setResyncAllResult(null);
+    try {
+      const result = await apiFetch<ResyncAllResult>("/diagnostics/resync-all", { method: "POST", token });
+      setResyncAllResult(result);
+      load();
+    } catch (err) {
+      setActionError(errorMessage(err, frT));
+    } finally {
+      setResyncAllBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
       {actionError && (
         <p className="rounded-lg border border-no/30 bg-no-soft px-3.5 py-2.5 text-sm text-no">{actionError}</p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4">
+        <div>
+          <p className="text-sm font-medium text-paper">Tout recréer on-chain</p>
+          <p className="text-xs text-muted">
+            Recrée les marchés manquants, resynchronise les paris bloqués et réaligne les soldes — utile après un
+            redémarrage du nœud Hardhat, qui repart sans aucun de ses marchés/soldes ({totalIssues} élément(s)
+            actuellement désynchronisé(s)).
+          </p>
+        </div>
+        <button
+          disabled={resyncAllBusy || totalIssues === 0}
+          onClick={runResyncAll}
+          className="shrink-0 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-ink transition-colors hover:opacity-90 disabled:opacity-50"
+        >
+          {resyncAllBusy ? "…" : "Tout recréer on-chain"}
+        </button>
+      </div>
+
+      {resyncAllResult && (
+        <div
+          className={`rounded-lg border px-3.5 py-2.5 text-sm ${
+            resyncAllFailures.length > 0 ? "border-no/30 bg-no-soft text-no" : "border-yes/30 bg-yes-soft text-yes"
+          }`}
+        >
+          <p>
+            {resyncAllResult.markets.recreated} marché(s) recréé(s), {resyncAllResult.bets.resynced} pari(s)
+            resynchronisé(s), {resyncAllResult.balances.resynced} solde(s) réaligné(s).
+          </p>
+          {resyncAllFailures.length > 0 && (
+            <ul className="mt-2 list-disc pl-5">
+              {resyncAllFailures.map((failure, i) => (
+                <li key={i}>{failure}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <Section title="Marchés désynchronisés" count={report.unsyncedMarkets.length} emptyLabel="Tous les marchés ouverts existent bien sur la blockchain.">

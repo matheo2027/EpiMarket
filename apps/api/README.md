@@ -7,7 +7,7 @@ Backend Express/TypeScript. La base de données est PostgreSQL, accédée via [P
 Deux fichiers `.env` distincts :
 
 - **`.env` à la racine du repo** — identifiants PostgreSQL utilisés par `docker-compose.yml` pour créer le conteneur (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`).
-- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS), les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas), et `INTERNAL_API_SECRET_MODERATION`/`INTERNAL_API_SECRET_BETS` (un secret distinct par bot Discord, voir `apps/discord-bot/README.md`).
+- **`apps/api/.env`** — utilisé par Prisma/Express. Contient `DATABASE_URL`, qui doit pointer vers les mêmes identifiants que le `.env` racine, plus `PORT` (port de l'API), `JWT_SECRET`, `FRONTEND_URL` (origine(s) autorisée(s) en CORS), les variables du POC blockchain (`WALLET_ENCRYPTION_KEY`, `HARDHAT_RPC_URL`, `HARDHAT_FUNDER_PRIVATE_KEY` — voir la section Intégration blockchain plus bas), et `INTERNAL_API_SECRET_MODERATION`/`INTERNAL_API_SECRET_BETS`/`INTERNAL_API_SECRET_RESOLUTIONS` (un secret distinct par bot Discord, voir `apps/discord-bot/README.md`).
 
 Si tu changes les identifiants dans le `.env` racine, mets à jour `DATABASE_URL` dans `apps/api/.env` en conséquence.
 
@@ -45,17 +45,21 @@ du calcul de résolution), favoris, commentaires, classement, propositions de ma
 approbation/rejet admin et via le secret interne du bot, idempotence, listing propre à l'utilisateur vs
 `?all=true` admin, cycle notify/sync utilisé par le bot), tickets (création liée à un pari/marché,
 permissions de lecture propriétaire/admin, mise à jour statut/note admin-only), flux Discord "paris"
-(`GET /bets/unnotified` séparant placés/retirés, `PATCH /bets/:id/notify`, secret interne requis), CRUD utilisateurs
+(`GET /bets/unnotified` séparant placés/retirés, `PATCH /bets/:id/notify`, secret interne requis), flux
+Discord "résolutions" (`GET /markets/unnotified-resolutions`, `PATCH /markets/:id/notify-resolution`,
+secret interne propre à ce bot, pas de doublon de notification sur un appel de resync), CRUD utilisateurs
 (création avec/sans wallet selon le rôle, doublons, permissions, suppression bloquée si l'utilisateur a
 déjà parié ou si c'est son propre compte admin, stats globales), diagnostics (détection d'un marché
-BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, et
-les trois actions de resynchronisation correspondantes — désynchronisations simulées par une écriture
-Postgres directe, en contournant volontairement les routes qui gardent normalement base et chaîne
-synchronisées, pour reproduire ce qui se passe réellement lors d'un redémarrage de la chaîne Hardhat),
-et un contrôle direct de `isContractDeployed()` (le vrai contrat déployé est bien détecté comme prêt,
-et une adresse sans code renvoie bien un bytecode vide — la simulation complète "contrat pas encore là"
-a été vérifiée manuellement plutôt qu'en automatisé, pour ne pas perturber la chaîne Hardhat partagée par
-tous les autres tests).
+BINARY/MULTI manquant on-chain, d'un pari resté sans payout après résolution, d'une dérive de solde, les
+trois actions de resynchronisation correspondantes, et `POST /diagnostics/resync-all` qui les regroupe —
+désynchronisations simulées par une écriture Postgres directe, en contournant volontairement les routes
+qui gardent normalement base et chaîne synchronisées, pour reproduire ce qui se passe réellement lors
+d'un redémarrage de la chaîne Hardhat), un contrôle direct de `isContractDeployed()` (le vrai contrat
+déployé est bien détecté comme prêt, et une adresse sans code renvoie bien un bytecode vide — la
+simulation complète "contrat pas encore là" a été vérifiée manuellement plutôt qu'en automatisé, pour ne
+pas perturber la chaîne Hardhat partagée par tous les autres tests), et le cache de nonce
+(`noteContractAddress()` — préserve le nonce en cache tant que l'adresse du contrat ne change pas, le
+vide entièrement dès qu'elle change, avec de vrais wallets jetables plutôt que des mocks).
 
 ## Schéma
 
@@ -139,8 +143,6 @@ Un pari placé par un utilisateur sur un marché.
 | `createdAt`   | `DateTime` |                                             |
 | `chainIndex`  | `Int`      | index de ce pari dans le tableau on-chain (`marketBets`/`multiMarketBets`), capturé depuis l'event `BetPlaced`/`MultiBetPlaced` à la création — sert à cibler ce pari précis pour un retrait (`withdrawBet`/`withdrawMultiBet`) |
 | `withdrawnAt` | `DateTime?` | posé si l'utilisateur a annulé ce pari avant résolution (voir `POST /bets/:id/withdraw` plus bas) — `null` sinon |
-| `discordNotifiedAt` | `DateTime?` | posé une fois le pari annoncé dans le flux Discord "paris" (`GET /bets/unnotified`, voir `apps/discord-bot/README.md`) |
-| `discordWithdrawNotifiedAt` | `DateTime?` | idem pour l'annonce du retrait — champ séparé car les deux évènements (placé/retiré) n'arrivent pas forcément au même moment |
 | `userId`      | `String`   | FK vers `User`                             |
 | `marketId`    | `String`   | FK vers `Market`                           |
 
@@ -202,6 +204,31 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
 | `notifiedAt`                      | `DateTime?`              | `null` tant que le bot n'a pas encore posté le message          |
 | `discordSyncedAt`                 | `DateTime?`              | `null` tant que Discord ne reflète pas encore la décision finale |
 
+### `DiscordNotification`
+
+Table générique "cet évènement a-t-il déjà été annoncé sur Discord ?", partagée par les **trois** bots
+(paris placés/retirés, résolution de marché). Remplace les colonnes `discordNotifiedAt`/
+`discordWithdrawNotifiedAt` qui vivaient directement sur `Bet` — utile tant qu'il n'y avait que deux
+évènements, mais le 3ᵉ évènement (résolution) porte sur `Market`, pas `Bet` : sans cette table, il
+aurait fallu répéter la même paire de colonnes codées en dur sur un second modèle.
+
+| Champ        | Type               | Notes                                                              |
+| ------------ | ------------------ | ------------------------------------------------------------------- |
+| `id`           | `String`           | cuid                                                                 |
+| `eventType`    | `DiscordEventType` | `BET_PLACED` \| `BET_WITHDRAWN` \| `MARKET_RESOLVED`                   |
+| `entityId`     | `String`           | `Bet.id` ou `Market.id` selon `eventType` — pas de FK (une seule table ne peut pas référencer deux modèles différents via une vraie relation Prisma) |
+| `createdAt`    | `DateTime`         | posé à la création de l'évènement (pari placé/retiré, marché résolu) |
+| `notifiedAt`   | `DateTime?`        | `null` tant que le bot concerné n'a pas encore posté le message      |
+
+`@@unique([eventType, entityId])` — un évènement donné n'a qu'une ligne, jamais deux notifications
+dupliquées pour le même pari/marché. La ligne est créée **au moment de l'évènement** (dans la même
+transaction Postgres que la création/mise à jour du pari, ou juste après la confirmation on-chain pour
+une résolution de marché — jamais dans le chemin de resync, un marché ne se résout qu'une fois), puis
+lue/marquée par les routes internes ci-dessous. Récupérer les lignes `Bet`/`Market` correspondantes se
+fait en deux requêtes (notifications non annoncées, puis entités par lot via `id: { in: [...] }`,
+réordonnées pour respecter l'ordre chronologique des notifications) plutôt qu'une jointure Prisma
+directe, impossible sur une relation polymorphe.
+
 ## Routes
 
 - `POST /auth/register`, `POST /auth/login`, `GET /auth/me` — `register`/`login` sont limités à 10
@@ -234,7 +261,14 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
   de bord : si un premier appel a résolu le marché on-chain mais échoué à synchroniser les gains/soldes
   en Postgres, un second appel avec le même `outcome`/`optionId` reprend uniquement la synchronisation au
   lieu de renvoyer une erreur bloquante (voir aussi `POST /diagnostics/resync-*` plus bas, qui s'appuie
-  sur ce même mécanisme).
+  sur ce même mécanisme). Une résolution réussie crée aussi une `DiscordNotification`
+  (`MARKET_RESOLVED`), lue par les deux routes internes ci-dessous — jamais recréée sur un appel de
+  resync, puisqu'un marché ne se résout qu'une fois.
+- `GET /markets/unnotified-resolutions` — (interne, `requireInternalSecret("INTERNAL_API_SECRET_RESOLUTIONS")`)
+  marchés résolus pas encore annoncés dans le salon Discord dédié (voir plus bas et
+  `apps/discord-bot/README.md`). Déclarée avant `GET /markets/:id` pour la même raison que
+  `GET /users/leaderboard` plus haut.
+- `PATCH /markets/:id/notify-resolution` — (interne) marque l'annonce de résolution comme faite pour ce marché.
 - `POST /bets` — placer un pari (utilisateur connecté, refusé avec `403` pour un compte `ADMIN` — voir
   plus bas). Attend `{ marketId, side, amount }` pour un marché `BINARY` ou `{ marketId, optionId, amount }`
   pour `MULTI`. Signe et envoie un vrai `placeBet`/`placeMultiBet` on-chain avec le wallet custodial de
@@ -299,7 +333,17 @@ proposition `MULTI`), plus le suivi de la décision et de la synchronisation Dis
 - `GET /diagnostics` — (admin) rapport de cohérence base ↔ blockchain : marchés `OPEN` absents on-chain (`BINARY` et `MULTI` tous deux vérifiés), paris sur un marché résolu sans `payout` calculé, utilisateurs dont `walletBalance` diverge du solde réel on-chain.
 - `POST /diagnostics/resync-market/:id` — (admin) recrée un marché manquant on-chain (`createMarket` pour `BINARY`, `createMultiMarket` pour `MULTI`).
 - `POST /diagnostics/resync-balance/:userId` — (admin) réaligne `walletBalance` sur le solde réel on-chain pour un utilisateur.
-- Les trois routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
+- `POST /diagnostics/resync-all` — (admin) version "tout en un" des deux routes précédentes plus la
+  resynchronisation des paris bloqués (`resyncResolvedMarketPayouts` dans `src/marketCreation.ts`, la
+  même fonction que le chemin de resync de `POST /markets/:id/resolve`) : recrée tous les marchés
+  manquants, resynchronise tous les paris sans `payout`, réaligne tous les soldes désynchronisés, en un
+  seul appel. Utile après un redémarrage du nœud Hardhat, qui peut désynchroniser plusieurs éléments à la
+  fois (voir la section blockchain plus bas). Chaque élément est traité indépendamment (un échec
+  n'interrompt pas les autres) et la réponse détaille les succès/échecs par catégorie
+  (`{ markets: { recreated, failed }, bets: { resynced, failed }, balances: { resynced, failed } }`) —
+  jamais d'échec avalé silencieusement, puisque ce sont de vraies écritures on-chain qui peuvent
+  individuellement échouer.
+- Les quatre routes `/diagnostics*` renvoient `503 { error, retryable: true }` (au lieu de planter) si le nœud Hardhat n'est pas encore joignable (`isBlockchainUnavailable()` dans `src/blockchain/contract.ts`, détecte les erreurs de type `NETWORK_ERROR`/`ECONNREFUSED`/`ECONNRESET`) — typiquement dans les premières secondes après `npm run dev`, le temps que le service `hardhat` finisse de démarrer. Le frontend (`apps/web/src/app/admin/diagnostics/page.tsx`) réessaie automatiquement dans ce cas.
 
 ## Règlement des gains (settlement)
 
@@ -348,6 +392,15 @@ déploiement. Ici, le résumé côté backend :
   même si `getTransactionCount()` renvoie la bonne valeur au moment de l'appel. `src/routes/bets.ts`
   passe donc toujours par `runAsSender(walletAddress, ...)` plutôt que d'appeler `getUserContract(user)`
   directement.
+- **Ce cache de nonce ne survit pas à un redéploiement du contrat.** Un redémarrage du conteneur
+  `hardhat` remet la chain à zéro (tous les nonces repartent de 0) mais pas ce process API, qui garde son
+  cache en mémoire — sans protection, le premier envoi après coup se voit rejeté (`"Nonce too low"`),
+  échec que `provisionNewWallet` avale silencieusement (utilisateur créé avec un solde à 0 sans erreur
+  visible). `noteContractAddress()` (`src/blockchain/provider.ts`), appelée depuis `getDeployment()` à
+  chaque lecture de `deployment.json`, détecte le changement d'adresse et vide tout le cache de nonces
+  (tous les comptes, pas seulement l'owner) dès que ce changement est observé — généralement avant le
+  prochain envoi plutôt qu'après son échec. Testé directement dans `test/nonce-cache.test.ts` (sans
+  toucher à la vraie chain partagée par le reste de la suite).
 - Chaque nouveau compte est crédité en ETH de test (`fundWallet`) pour payer le gas de ses futures
   transactions, distribué par le compte owner du contrat — pas de vraie économie de gas à gérer sur un
   réseau local.
@@ -399,8 +452,10 @@ déploiement. Ici, le résumé côté backend :
   paramétrées par le nom de la variable à vérifier) — un appelant non-humain reste explicitement distinct
   d'un utilisateur, sans compte à protéger/désactiver si le secret fuit (il suffit de le régénérer).
   **Chaque bot a son propre secret** (`INTERNAL_API_SECRET_MODERATION` pour le bot de modération,
-  `INTERNAL_API_SECRET_BETS` pour le bot paris) plutôt qu'un secret unique partagé — un bot compromis ne
-  peut agir que sur ses propres routes (`/market-proposals/*` ou `/bets/*`), pas sur celles de l'autre.
+  `INTERNAL_API_SECRET_BETS` pour le bot paris, `INTERNAL_API_SECRET_RESOLUTIONS` pour le bot de
+  résolution) plutôt qu'un secret unique partagé — un bot compromis ne peut agir que sur ses propres
+  routes (`/market-proposals/*`, `/bets/*` ou `/markets/unnotified-resolutions` +
+  `/markets/:id/notify-resolution`), pas sur celles des autres.
 - **Aucune requête ne peut faire planter le serveur.** `express-async-errors` est importé en premier dans `src/index.ts` pour qu'une promesse rejetée dans une route `async` soit automatiquement transmise au middleware d'erreur final, qui répond `500` proprement au lieu de laisser le process planter (Express 4 ne le fait pas nativement).
 
 ## Diagramme

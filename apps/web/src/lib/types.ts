@@ -108,6 +108,12 @@ export type DiagnosticsReport = {
   balanceDrift: BalanceDrift[];
 };
 
+export type ResyncAllResult = {
+  markets: { recreated: number; failed: { id: string; title: string; error: string }[] };
+  bets: { resynced: number; failed: { marketId: string; title: string; error: string }[] };
+  balances: { resynced: number; failed: { id: string; username: string; error: string }[] };
+};
+
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   OPEN: "Ouvert",
   IN_PROGRESS: "En cours",

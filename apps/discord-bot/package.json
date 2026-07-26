@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:bets": "tsx watch src/bets-bot/index.ts",
+    "dev:resolutions": "tsx watch src/resolutions-bot/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "start:bets": "node dist/bets-bot/index.js"
+    "start:bets": "node dist/bets-bot/index.js",
+    "start:resolutions": "node dist/resolutions-bot/index.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
